@@ -23,28 +23,32 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+/**
+ * Simplified recording states - reduced from 6 to 4 phases
+ */
 enum class RecordingPhase {
-    IDLE,
-    INITIALIZING_MODEL,
-    READY,
-    LISTENING,
-    PROCESSING,
-    COMPLETE
+    IDLE,           // Model not ready, waiting for initialization
+    READY,          // Ready to record
+    LISTENING,      // Currently recording audio
+    PROCESSING      // Transcribing recorded audio
 }
 
+/**
+ * Single source of truth for all UI state
+ */
 data class MainUiState(
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
     val modelState: ModelState = ModelState.NotLoaded,
+    val selectedModel: WhisperModel = WhisperModel.DEFAULT,
     val currentTranscription: String = "",
     val history: List<Transcription> = emptyList(),
     val error: String? = null,
-    val recordingAmplitudeDb: Float = 0f,
-    val audioDurationSeconds: Float = 0f,
-    val selectedModel: WhisperModel = WhisperModel.DEFAULT,
+
+    // Dialogs
     val showModelSelector: Boolean = false,
     val isFirstLaunch: Boolean = true,
-    val showDeleteConfirmation: Long? = null,  // ID of transcription to delete
-    val editingTranscription: Transcription? = null  // Transcription being edited
+    val deleteConfirmationId: Long? = null,
+    val editingTranscription: Transcription? = null
 )
 
 class MainViewModel(
@@ -60,15 +64,18 @@ class MainViewModel(
         loadHistory()
         observeModelState()
         observeRecordingStatus()
-        checkFirstLaunch()
+        initializeOnStartup()
     }
 
-    private fun checkFirstLaunch() {
-        viewModelScope.launch {
-            val hasModel = WhisperModel.entries.any { sttEngine.isModelAvailable(it) }
+    // ========== Initialization ==========
 
-            if (hasModel) {
-                val availableModel = WhisperModel.entries.first { sttEngine.isModelAvailable(it) }
+    private fun initializeOnStartup() {
+        viewModelScope.launch {
+            // Check if any model is already downloaded
+            val availableModel = WhisperModel.entries.firstOrNull { sttEngine.isModelAvailable(it) }
+
+            if (availableModel != null) {
+                // Model exists, load it
                 _uiState.update {
                     it.copy(
                         selectedModel = availableModel,
@@ -76,8 +83,9 @@ class MainViewModel(
                         showModelSelector = false
                     )
                 }
-                initializeModel(availableModel)
+                loadModel(availableModel)
             } else {
+                // First launch, show model selector
                 _uiState.update { it.copy(showModelSelector = true, isFirstLaunch = true) }
             }
         }
@@ -85,21 +93,15 @@ class MainViewModel(
 
     private fun observeModelState() {
         viewModelScope.launch {
-            sttEngine.modelState.collect { modelState ->
-                _uiState.update { it.copy(modelState = modelState) }
-
-                when (modelState) {
-                    is ModelState.Ready -> {
-                        if (_uiState.value.recordingPhase == RecordingPhase.INITIALIZING_MODEL) {
-                            _uiState.update { it.copy(recordingPhase = RecordingPhase.READY) }
-                        }
+            sttEngine.modelState.collect { state ->
+                _uiState.update { current ->
+                    val newPhase = when (state) {
+                        is ModelState.Ready -> RecordingPhase.READY
+                        is ModelState.Error -> RecordingPhase.IDLE
+                        else -> current.recordingPhase
                     }
-                    is ModelState.Error -> {
-                        _uiState.update {
-                            it.copy(error = modelState.message, recordingPhase = RecordingPhase.IDLE)
-                        }
-                    }
-                    else -> {}
+                    val error = if (state is ModelState.Error) state.message else current.error
+                    current.copy(modelState = state, recordingPhase = newPhase, error = error)
                 }
             }
         }
@@ -108,24 +110,46 @@ class MainViewModel(
     private fun observeRecordingStatus() {
         viewModelScope.launch {
             audioRecorder.status.collect { status ->
-                when (status) {
-                    is RecordingStatus.Recording -> {
-                        _uiState.update { it.copy(recordingAmplitudeDb = status.amplitudeDb) }
+                if (status is RecordingStatus.Error) {
+                    _uiState.update {
+                        it.copy(error = status.message, recordingPhase = RecordingPhase.READY)
                     }
-                    is RecordingStatus.Error -> {
-                        _uiState.update {
-                            it.copy(error = status.message, recordingPhase = RecordingPhase.READY)
-                        }
-                    }
-                    else -> {}
                 }
             }
         }
     }
 
-    private fun initializeModel(model: WhisperModel = _uiState.value.selectedModel) {
+    private fun loadHistory() {
         viewModelScope.launch {
-            _uiState.update { it.copy(recordingPhase = RecordingPhase.INITIALIZING_MODEL) }
+            repository.getAllTranscriptions().collect { list ->
+                _uiState.update { it.copy(history = list) }
+            }
+        }
+    }
+
+    // ========== Model Selection ==========
+
+    fun selectModel(model: WhisperModel) {
+        _uiState.update {
+            it.copy(selectedModel = model, showModelSelector = false, isFirstLaunch = false)
+        }
+        loadModel(model)
+    }
+
+    fun showModelSelector() {
+        _uiState.update { it.copy(showModelSelector = true) }
+    }
+
+    fun hideModelSelector() {
+        // Can only hide if not first launch or model is ready
+        val state = _uiState.value
+        if (!state.isFirstLaunch || state.modelState is ModelState.Ready) {
+            _uiState.update { it.copy(showModelSelector = false) }
+        }
+    }
+
+    private fun loadModel(model: WhisperModel) {
+        viewModelScope.launch {
             try {
                 sttEngine.loadModel(model)
             } catch (e: Exception) {
@@ -136,41 +160,20 @@ class MainViewModel(
         }
     }
 
-    fun selectModel(model: WhisperModel) {
-        _uiState.update {
-            it.copy(selectedModel = model, showModelSelector = false, isFirstLaunch = false)
-        }
-        initializeModel(model)
-    }
-
-    fun showModelSelector() {
-        _uiState.update { it.copy(showModelSelector = true) }
-    }
-
-    fun hideModelSelector() {
-        if (!_uiState.value.isFirstLaunch || _uiState.value.modelState is ModelState.Ready) {
-            _uiState.update { it.copy(showModelSelector = false) }
-        }
-    }
-
-    private fun loadHistory() {
-        viewModelScope.launch {
-            repository.getAllTranscriptions().collect { transcriptions ->
-                _uiState.update { it.copy(history = transcriptions) }
-            }
-        }
-    }
+    // ========== Recording ==========
 
     fun onRecordClick() {
-        when (_uiState.value.recordingPhase) {
-            RecordingPhase.IDLE, RecordingPhase.INITIALIZING_MODEL -> {
-                if (_uiState.value.modelState !is ModelState.Ready) {
-                    initializeModel()
+        val state = _uiState.value
+        when (state.recordingPhase) {
+            RecordingPhase.IDLE -> {
+                // Try to load model if not ready
+                if (state.modelState !is ModelState.Ready) {
+                    loadModel(state.selectedModel)
                 }
             }
-            RecordingPhase.READY, RecordingPhase.COMPLETE -> startRecording()
+            RecordingPhase.READY -> startRecording()
             RecordingPhase.LISTENING -> stopRecording()
-            RecordingPhase.PROCESSING -> {}
+            RecordingPhase.PROCESSING -> { /* Ignore clicks while processing */ }
         }
     }
 
@@ -182,12 +185,11 @@ class MainViewModel(
                     it.copy(
                         recordingPhase = RecordingPhase.LISTENING,
                         currentTranscription = "",
-                        error = null,
-                        audioDurationSeconds = 0f
+                        error = null
                     )
                 }
             } catch (e: AudioRecorderException) {
-                _uiState.update { it.copy(error = "Failed to start: ${e.message}") }
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }
@@ -198,12 +200,11 @@ class MainViewModel(
         viewModelScope.launch {
             try {
                 val audioData = withContext(Dispatchers.Default) { audioRecorder.stopRecording() }
-                val durationSeconds = AudioConfig.calculateDurationSeconds(audioData)
-                _uiState.update { it.copy(audioDurationSeconds = durationSeconds) }
+                val duration = AudioConfig.calculateDurationSeconds(audioData)
 
-                if (durationSeconds < 0.5f) {
+                if (duration < 0.5f) {
                     _uiState.update {
-                        it.copy(recordingPhase = RecordingPhase.READY, error = "Recording too short")
+                        it.copy(recordingPhase = RecordingPhase.READY, error = "Recording too short (min 0.5s)")
                     }
                     return@launch
                 }
@@ -214,10 +215,10 @@ class MainViewModel(
                     is TranscriptionResult.Success -> {
                         val text = result.text.trim()
                         _uiState.update {
-                            it.copy(currentTranscription = text, recordingPhase = RecordingPhase.COMPLETE)
+                            it.copy(currentTranscription = text, recordingPhase = RecordingPhase.READY)
                         }
                         if (text.isNotBlank()) {
-                            repository.insertTranscription(formatCurrentTimestamp(), text)
+                            repository.insertTranscription(formatTimestamp(), text)
                         }
                     }
                     is TranscriptionResult.Error -> {
@@ -234,29 +235,29 @@ class MainViewModel(
         }
     }
 
-    // Delete with confirmation
-    fun requestDeleteTranscription(id: Long) {
-        _uiState.update { it.copy(showDeleteConfirmation = id) }
+    // ========== History Actions ==========
+
+    fun requestDelete(id: Long) {
+        _uiState.update { it.copy(deleteConfirmationId = id) }
     }
 
-    fun confirmDeleteTranscription() {
-        val id = _uiState.value.showDeleteConfirmation ?: return
+    fun confirmDelete() {
+        val id = _uiState.value.deleteConfirmationId ?: return
         viewModelScope.launch {
             repository.deleteTranscription(id)
-            _uiState.update { it.copy(showDeleteConfirmation = null) }
+            _uiState.update { it.copy(deleteConfirmationId = null) }
         }
     }
 
-    fun cancelDeleteTranscription() {
-        _uiState.update { it.copy(showDeleteConfirmation = null) }
+    fun cancelDelete() {
+        _uiState.update { it.copy(deleteConfirmationId = null) }
     }
 
-    // Edit transcription
-    fun startEditTranscription(transcription: Transcription) {
+    fun startEdit(transcription: Transcription) {
         _uiState.update { it.copy(editingTranscription = transcription) }
     }
 
-    fun saveEditTranscription(newText: String) {
+    fun saveEdit(newText: String) {
         val transcription = _uiState.value.editingTranscription ?: return
         viewModelScope.launch {
             repository.updateTranscription(transcription.id, newText)
@@ -264,7 +265,7 @@ class MainViewModel(
         }
     }
 
-    fun cancelEditTranscription() {
+    fun cancelEdit() {
         _uiState.update { it.copy(editingTranscription = null) }
     }
 
@@ -272,10 +273,11 @@ class MainViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    private fun formatCurrentTimestamp(): String {
-        val now = Clock.System.now()
-        val localDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
-        return "${localDateTime.date} ${localDateTime.hour.toString().padStart(2, '0')}:${localDateTime.minute.toString().padStart(2, '0')}"
+    // ========== Utilities ==========
+
+    private fun formatTimestamp(): String {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        return "${now.date} ${now.hour.toString().padStart(2, '0')}:${now.minute.toString().padStart(2, '0')}"
     }
 
     override fun onCleared() {

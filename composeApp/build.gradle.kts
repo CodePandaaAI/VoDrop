@@ -39,6 +39,11 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
+
+            // WhisperKit for Android STT
+            implementation(libs.whisperkit.android)
+            implementation(libs.qnn.runtime)
+            implementation(libs.qnn.litert.delegate)
         }
 
         commonMain.dependencies {
@@ -91,13 +96,17 @@ android {
         versionName = "1.0"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a")  // WhisperKit only supports arm64
         }
     }
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        // Required for WhisperKit
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 

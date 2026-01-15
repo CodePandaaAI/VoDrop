@@ -1,5 +1,5 @@
 [versions]
-agp = "8.7.3"
+agp = "8.9.3"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
@@ -7,11 +7,17 @@ androidx-activity = "1.10.0"
 androidx-appcompat = "1.7.0"
 androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
-androidx-lifecycle = "2.8.7"
-compose-multiplatform = "1.8.0"
+whisperkit = "0.3.3"
+qnn-runtime = "2.34.0"
+
+# Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
+androidx-lifecycle = "2.8.4"
+
+# Updated Compose to 1.8.0 for Kotlin 2.1.21 compatibility
+compose-multiplatform = "1.7.3"
 kotlin = "2.1.21"
 kotlinx-coroutines = "1.10.1"
-compose-icons = "1.8.0"
+compose-icons = "1.7.3"
 sqldelight = "2.0.2"
 koin = "4.0.2"
 accompanist = "0.36.0"
@@ -57,6 +63,11 @@ accompanist-permissions = { module = "com.google.accompanist:accompanist-permiss
 
 # WhisperJNI for Desktop
 whisper-jni = { module = "io.github.givimad:whisper-jni", version.ref = "whisper-jni" }
+
+# WhisperKit for Android STT
+whisperkit-android = { module = "com.argmaxinc:whisperkit", version.ref = "whisperkit" }
+qnn-runtime = { module = "com.qualcomm.qnn:qnn-runtime", version.ref = "qnn-runtime" }
+qnn-litert-delegate = { module = "com.qualcomm.qnn:qnn-litert-delegate", version.ref = "qnn-runtime" }
 
 # Ktor for model downloading
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
