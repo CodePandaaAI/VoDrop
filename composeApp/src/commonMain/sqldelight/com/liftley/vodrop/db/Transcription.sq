@@ -1,18 +1,17 @@
-CREATE TABLE Transcription (
-    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE TranscriptionEntity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
     text TEXT NOT NULL
 );
 
 selectAll:
-SELECT *
-FROM Transcription
-ORDER BY id DESC;
+SELECT * FROM TranscriptionEntity ORDER BY id DESC;
 
 insertItem:
-INSERT INTO Transcription(timestamp, text)
-VALUES (?, ?);
+INSERT INTO TranscriptionEntity (timestamp, text) VALUES (?, ?);
+
+updateText:
+UPDATE TranscriptionEntity SET text = ? WHERE id = ?;
 
 deleteItem:
-DELETE FROM Transcription
-WHERE id = ?;
+DELETE FROM TranscriptionEntity WHERE id = ?;

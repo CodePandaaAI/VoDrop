@@ -1,24 +1,32 @@
 package com.liftley.vodrop.audio
 
-// iOS implementation requires AVFoundation - placeholder for now
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class IosAudioRecorder : AudioRecorder {
 
-    private var isRecording = false
-    private var audioData = ByteArray(0)
+    private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
+    override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
+    private var isCurrentlyRecording = false
 
-    override fun startRecording() {
-        isRecording = true
+    override suspend fun startRecording() {
+        isCurrentlyRecording = true
+        _status.value = RecordingStatus.Recording(0f)
         // TODO: Implement with AVAudioEngine
-        // This requires platform-specific Swift/ObjC code
     }
 
-    override fun stopRecording(): ByteArray {
-        isRecording = false
-        // TODO: Return recorded audio data
-        return audioData
+    override suspend fun stopRecording(): ByteArray {
+        isCurrentlyRecording = false
+        _status.value = RecordingStatus.Idle
+        return ByteArray(0) // TODO: Return AVAudioEngine data
     }
 
-    override fun isRecording(): Boolean = isRecording
+    override fun isRecording(): Boolean = isCurrentlyRecording
+    override fun release() {
+        isCurrentlyRecording = false
+        _status.value = RecordingStatus.Idle
+    }
 }
 
 actual fun createAudioRecorder(): AudioRecorder = IosAudioRecorder()

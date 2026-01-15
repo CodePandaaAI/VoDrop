@@ -13,7 +13,7 @@ kotlin {
         compilations.all {
             compileTaskProvider.configure {
                 compilerOptions {
-                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+                    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
                 }
             }
         }
@@ -38,6 +38,7 @@ kotlin {
             implementation(libs.koin.android)
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
+            implementation(libs.ktor.client.okhttp)
         }
 
         commonMain.dependencies {
@@ -56,6 +57,7 @@ kotlin {
             implementation(libs.compose.components.resources)
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.ktor.client.core)
         }
 
         commonTest.dependencies {
@@ -66,10 +68,13 @@ kotlin {
             implementation(libs.sqldelight.sqlite.driver)
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
+            implementation(libs.whisper.jni)
+            implementation(libs.ktor.client.okhttp)
         }
 
         iosMain.dependencies {
             implementation(libs.sqldelight.native.driver)
+            implementation(libs.ktor.client.darwin)
         }
     }
 }
@@ -84,6 +89,10 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     packaging {
@@ -99,8 +108,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 }
 

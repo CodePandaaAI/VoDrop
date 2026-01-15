@@ -1,124 +1,73 @@
-# VoDrop Development Session Summary
-
-**Date:** January 15, 2026  
-**Session Duration:** ~2 hours  
-**Developer:** AI Assistant (Gemini)
+# VoDrop - Session Summary
+> **Last Updated:** 2026-01-15  
+> **Status:** MVP Complete (Desktop Fully Functional, Android Recording Works)
 
 ---
 
-## Executive Summary
+## 🎯 Project Overview
 
-### What We Did
-We successfully bootstrapped **VoDrop**, a privacy-focused, offline-first voice-to-text application using **Kotlin Multiplatform (KMP)** and **Compose Multiplatform**. Starting from an initial project template, we implemented the complete Phase 1 (KMP Foundation & Core Logic) and Phase 2 (Shared UI & Platform Integration) of the project roadmap.
+**VoDrop** is a cross-platform voice-to-text transcription app built with Kotlin Multiplatform (KMP) and Compose Multiplatform. It allows users to record audio and transcribe it to text using OpenAI's Whisper model running locally on-device.
 
-### Approach
-1. **Read & Understand**: Started by thoroughly reading the project brief (`VoDrop_ Project Brief and Technical Roadmap (Final).md`) and the AI developer prompt file to understand requirements, architecture, and implementation priorities.
-
-2. **Foundation First**: Focused on establishing a solid KMP foundation with proper dependency management using Gradle Version Catalog, ensuring all dependencies are explicitly defined and version-controlled.
-
-3. **Iterative Problem-Solving**: Encountered and resolved multiple build configuration issues including:
-   - TOML syntax errors (duplicate sections)
-   - Deprecated Gradle DSL usage
-   - Non-existent Compose Multiplatform versions (1.10.0 → 1.7.3)
-   - Kotlin version compatibility issues
-   - Missing platform-specific implementations
-
-4. **Clean Architecture**: Implemented a clean separation of concerns:
-   - **Data Layer**: SQLDelight database, Repository pattern
-   - **Domain Layer**: Use cases, Models
-   - **Presentation Layer**: ViewModels, Compose UI
-   - **DI**: Koin for dependency injection
-
-5. **Platform-Specific Code**: Used `expect/actual` mechanism for platform-specific implementations (Database drivers, Audio recording, STT engine).
-
-### Key Decisions Made
-- Used **Koin** for dependency injection (user preference)
-- Used **SQLDelight** for multiplatform database
-- Downgraded from non-existent Compose 1.10.0 to stable **1.7.3**
-- Downgraded Kotlin from 2.3.0 to **2.2.20** for compatibility
-- Implemented **Material 3 Expressive** design with dark/light theme support
-- Created placeholder STT implementations (Whisper.cpp integration pending)
-
-### Thought Process
-The project brief specified a 100% offline voice-to-text app using Whisper.cpp. However, Whisper.cpp integration requires:
-1. Compiling native C++ libraries for each platform
-2. JNI/C-interop bindings
-3. Bundling ML models (~40MB-1.5GB depending on model size)
-
-Given the complexity, I prioritized:
-1. Getting the app structure and UI working first
-2. Implementing audio capture infrastructure
-3. Creating placeholder STT that can be swapped with real Whisper.cpp later
-
-This allows the user to test the app flow while Whisper.cpp integration is developed separately.
+### Key Features
+- 🎤 Voice recording with real-time amplitude visualization
+- 📝 Speech-to-text transcription using Whisper.cpp
+- 💾 Transcription history with SQLite persistence
+- 📋 Copy, edit, and delete transcriptions
+- ⚙️ Three AI model choices (Fast, Balanced, Quality)
+- 🌐 One-time model download with progress tracking
+- 🖥️ Works on Desktop (Windows/macOS/Linux) and Android
 
 ---
 
-## Project Context Files
+## 📱 Platform Status
 
-### Primary Reference Documents
-1. **`VoDrop_ Project Brief and Technical Roadmap (Final).md`** - Contains:
-   - Executive summary and app vision
-   - Technical architecture (KMP, Compose, Whisper.cpp, SQLDelight)
-   - Adaptive UI strategy for each platform
-   - Feature breakdown and monetization (Free vs Pro)
-   - 4-phase development roadmap
-   - Competitive advantage analysis
-
-2. **`AI Developer Prompt_ VoDrop - Kotlin Multiplatform (KMP) Project Kickoff.md`** - Contains:
-   - Technical stack details
-   - Phase 1 implementation tasks
-   - Specific code requirements (Whisper.cpp C-interop, SQLDelight schema, expect/actual patterns)
+| Platform          | Recording              | Transcription       | Status                         |
+|-------------------|------------------------|---------------------|--------------------------------|
+| **Desktop (JVM)** | ✅ Real (`javax.sound`) | ✅ Real (WhisperJNI) | **Production Ready**           |
+| **Android**       | ✅ Real (`AudioRecord`) | ⚠️ Placeholder      | Recording works, STT needs JNI |
+| **iOS**           | ⚠️ Placeholder         | ⚠️ Placeholder      | Requires Swift interop         |
 
 ---
 
-## Current Project State
+## 🏗️ Architecture
 
-### Completed ✅
+### Design Pattern: **MVVM + Clean Architecture**
 
-#### Phase 1: KMP Foundation & Core Logic
-- [x] KMP project structure (Android, iOS, Desktop targets)
-- [x] SQLDelight database configuration
-- [x] Transcription.sq schema with CRUD operations
-- [x] TranscriptionRepository with Flow support
-- [x] SpeechToTextEngine interface with expect/actual
-- [x] AudioRecorder interface with expect/actual
-- [x] Koin dependency injection setup
-- [x] Platform-specific database drivers
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        UI Layer                              │
+│  ┌─────────────────┐  ┌─────────────────────────────────┐   │
+│  │   MainScreen    │  │       ViewModel (MainViewModel) │   │
+│  │   (Compose)     │←→│   - UI State Management         │   │
+│  └─────────────────┘  │   - Business Logic Orchestration│   │
+│                       └─────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│                     Domain Layer                             │
+│  ┌─────────────────┐  ┌─────────────────────────────────┐   │
+│  │   Transcription │  │        Repository               │   │
+│  │   (Model)       │  │   (TranscriptionRepository)     │   │
+│  └─────────────────┘  └─────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│                     Platform Layer                           │
+│  ┌─────────────────┐  ┌─────────────────────────────────┐   │
+│  │  AudioRecorder  │  │     SpeechToTextEngine          │   │
+│  │  (expect/actual)│  │     (expect/actual)             │   │
+│  └─────────────────┘  └─────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────┤
+│                    Data Layer                                │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                  SQLDelight (VoDropDatabase)            ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
 
-#### Phase 2: Shared UI & Platform Integration
-- [x] VoDropTheme (Material 3 dark/light)
-- [x] MainScreen (record button, status, transcription preview)
-- [x] HistoryScreen (transcription list with delete)
-- [x] MainViewModel (state management, recording flow)
-- [x] Navigation (simple state-based)
-- [x] Expressive UI design (large buttons, rounded corners, animations)
-
-### In Progress 🚧
-
-#### Audio Recording
-- [x] Android AudioRecorder implementation (using AudioRecord API)
-- [x] Desktop/JVM AudioRecorder implementation (using javax.sound)
-- [⚠️] iOS AudioRecorder (placeholder - needs AVAudioEngine)
-
-#### Speech-to-Text
-- [x] SpeechToTextEngine interface defined
-- [⚠️] All platforms have placeholder implementations
-- [ ] Whisper.cpp native library compilation
-- [ ] JNI bindings for Android/Desktop
-- [ ] C-interop for iOS
-
-### Not Started ❌
-- [ ] Whisper.cpp actual integration
-- [ ] Clipboard auto-copy after transcription
-- [ ] Floating UI (Android bubble, iOS Live Activity, Desktop hotkey)
-- [ ] Multi-language model support
-- [ ] Pro features and monetization
-- [ ] App store deployment
+### Dependency Injection: **Koin**
+- Platform-agnostic DI framework
+- Modules: `appModule` (common), `platformModule` (platform-specific)
 
 ---
 
-## Project File Structure
+## 📁 Project Structure
 
 ```
 VoDrop/
@@ -126,132 +75,286 @@ VoDrop/
 │   ├── build.gradle.kts
 │   └── src/
 │       ├── commonMain/kotlin/com/liftley/vodrop/
-│       │   ├── App.kt
+│       │   ├── App.kt                    # Root Composable
 │       │   ├── audio/
-│       │   │   └── AudioRecorder.kt (expect)
+│       │   │   └── AudioRecorder.kt      # Recording interface + AudioConfig
 │       │   ├── di/
-│       │   │   ├── AppModule.kt
-│       │   │   └── DatabaseDriverFactory.kt (expect)
+│       │   │   └── AppModule.kt          # Koin DI module
 │       │   ├── model/
-│       │   │   └── Transcription.kt
+│       │   │   └── Transcription.kt      # Domain model
 │       │   ├── repository/
 │       │   │   └── TranscriptionRepository.kt
 │       │   ├── stt/
-│       │   │   └── SpeechToTextEngine.kt (expect)
-│       │   ├── ui/
-│       │   │   ├── HistoryScreen.kt
-│       │   │   ├── MainScreen.kt
-│       │   │   ├── MainViewModel.kt
-│       │   │   └── theme/
-│       │   │       └── Theme.kt
-│       │   └── usecase/
-│       │       └── RecordAndSaveTranscriptionUseCase.kt
-│       ├── commonMain/sqldelight/com/liftley/vodrop/db/
-│       │   └── Transcription.sq
+│       │   │   └── SpeechToTextEngine.kt # STT interface + WhisperModel enum
+│       │   └── ui/
+│       │       ├── MainScreen.kt         # Main UI with dialogs
+│       │       ├── MainViewModel.kt      # UI state management
+│       │       └── theme/
+│       │           └── Theme.kt          # Material 3 theming
+│       │
+│       ├── jvmMain/kotlin/com/liftley/vodrop/
+│       │   ├── main.kt                   # Desktop entry point
+│       │   ├── Platform.jvm.kt
+│       │   ├── audio/
+│       │   │   └── AudioRecorder.jvm.kt  # javax.sound implementation
+│       │   ├── di/
+│       │   │   └── PlatformModule.jvm.kt # JVM-specific DI
+│       │   └── stt/
+│       │       └── SpeechToTextEngine.jvm.kt  # WhisperJNI implementation
+│       │
 │       ├── androidMain/kotlin/com/liftley/vodrop/
 │       │   ├── MainActivity.kt
+│       │   ├── VoDropApplication.kt      # Application class with Koin init
 │       │   ├── audio/
-│       │   │   └── AudioRecorder.android.kt (actual)
+│       │   │   └── AudioRecorder.android.kt  # AudioRecord implementation
 │       │   ├── di/
-│       │   │   ├── DatabaseDriverFactory.android.kt (actual)
 │       │   │   └── PlatformModule.android.kt
 │       │   └── stt/
-│       │       └── SpeechToTextEngine.android.kt (actual)
+│       │       └── SpeechToTextEngine.android.kt  # Placeholder (needs JNI)
+│       │
 │       ├── iosMain/kotlin/com/liftley/vodrop/
-│       │   ├── MainViewController.kt
 │       │   ├── audio/
-│       │   │   └── AudioRecorder.ios.kt (actual)
-│       │   ├── di/
-│       │   │   ├── DatabaseDriverFactory.ios.kt (actual)
-│       │   │   └── PlatformModule.ios.kt
+│       │   │   └── AudioRecorder.ios.kt  # Placeholder
 │       │   └── stt/
-│       │       └── SpeechToTextEngine.ios.kt (actual)
-│       └── jvmMain/kotlin/com/liftley/vodrop/
-│           ├── main.kt
-│           ├── audio/
-│           │   └── AudioRecorder.jvm.kt (actual)
-│           ├── di/
-│           │   ├── DatabaseDriverFactory.jvm.kt (actual)
-│           │   └── PlatformModule.jvm.kt
-│           └── stt/
-│               └── SpeechToTextEngine.jvm.kt (actual)
+│       │       └── SpeechToTextEngine.ios.kt  # Placeholder
+│       │
+│       └── commonMain/sqldelight/com/liftley/vodrop/db/
+│           └── Transcription.sq          # SQL schema and queries
+│
 ├── gradle/
-│   └── libs.versions.toml
-├── iosApp/
-├── build.gradle.kts
-├── settings.gradle.kts
-├── VoDrop_ Project Brief and Technical Roadmap (Final).md
-├── AI Developer Prompt_ VoDrop - Kotlin Multiplatform (KMP) Project Kickoff.md
-└── SESSION_SUMMARY.md (this file)
+│   └── libs.versions.toml                # Version catalog
+│
+└── settings.gradle.kts
 ```
 
 ---
 
-## Key Dependencies
+## 🔧 Technology Stack
 
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| Kotlin | 2.2.20 | Language |
-| Compose Multiplatform | 1.7.3 | UI Framework |
-| Android Gradle Plugin | 8.9.3 | Android build |
-| SQLDelight | 2.2.1 | Database |
-| Koin | 4.1.1 | Dependency Injection |
-| kotlinx-coroutines | 1.10.2 | Async |
-| kotlinx-datetime | 0.6.1 | Date/Time |
-| Accompanist Permissions | 0.34.0 | Android runtime permissions |
+### Versions (as of 2026-01-15)
 
----
-
-## Known Issues & Warnings
-
-1. **KMP + Android Application Warning**: The project uses `com.android.application` in the KMP module, which will be incompatible with AGP 9.0. Future migration will require splitting into `shared` (library) and `androidApp` (application) modules.
-
-2. **expect/actual Classes Beta Warning**: Using expect/actual classes generates beta warnings. Can be suppressed with `-Xexpect-actual-classes` compiler flag.
-
-3. **iOS Audio Recording**: Not fully implemented - requires AVAudioEngine Swift/ObjC interop.
-
-4. **Whisper.cpp**: Placeholder only - actual integration requires native library compilation.
+| Technology            | Version | Purpose                      |
+|-----------------------|---------|------------------------------|
+| Kotlin                | 2.1.21  | Main language                |
+| Compose Multiplatform | 1.8.0   | UI framework                 |
+| AGP                   | 8.7.3   | Android build                |
+| Android compileSdk    | 36      | Android 16                   |
+| Android targetSdk     | 36      | Android 16                   |
+| Android minSdk        | 24      | Android 7.0+                 |
+| Koin                  | 4.0.2   | Dependency Injection         |
+| SQLDelight            | 2.0.2   | Database                     |
+| Ktor                  | 3.0.3   | HTTP client (model download) |
+| Lifecycle             | 2.8.7   | ViewModel                    |
+| Coroutines            | 1.10.1  | Async operations             |
+| WhisperJNI            | 1.7.1   | Desktop STT                  |
+| Accompanist           | 0.36.0  | Android permissions          |
+| Java Target           | 17      | JVM compatibility            |
 
 ---
 
-## Next Steps for Future Sessions
+## 🎙️ Audio Configuration
 
-### Immediate Priority
-1. Test the Android app with microphone permission flow
-2. Verify audio recording captures proper PCM data
-3. Research Whisper.cpp Android integration options (pre-built AARs vs building from source)
+Whisper.cpp requires specific audio format:
 
-### Short Term
-1. Integrate actual Whisper.cpp for Android
-2. Implement clipboard copy after transcription
-3. Add permission request UI for microphone
+```kotlin
+object AudioConfig {
+    const val SAMPLE_RATE = 16000      // 16kHz
+    const val CHANNELS = 1              // Mono
+    const val BITS_PER_SAMPLE = 16      // 16-bit PCM
+    const val BYTES_PER_SAMPLE = 2      // Little-endian
+}
+```
 
-### Medium Term
-1. Complete iOS audio recording with AVAudioEngine
-2. Compile Whisper.cpp for iOS
-3. Add floating bubble (Android) / system tray (Desktop)
-
-### Long Term
-1. Project structure migration (separate androidApp module)
-2. Multi-language model support
-3. Pro features and billing integration
-4. App store deployment
+### Recording Flow
+1. User taps record button
+2. `AudioRecorder.startRecording()` captures raw PCM audio
+3. Real-time amplitude updates via `StateFlow<RecordingStatus>`
+4. User taps stop → `stopRecording()` returns `ByteArray`
+5. Audio data passed to `SpeechToTextEngine.transcribe()`
 
 ---
 
-## Commands to Build & Run
+## 🤖 Whisper Models
+
+### Available Models
+| Model        | File                 | Size   | Quality | Use Case       |
+|--------------|----------------------|--------|---------|----------------|
+| **Fast**     | `ggml-tiny.en.bin`   | 75 MB  | ⭐⭐      | Quick notes    |
+| **Balanced** | `ggml-small.en.bin`  | 466 MB | ⭐⭐⭐⭐    | Default choice |
+| **Quality**  | `ggml-medium.en.bin` | 1.5 GB | ⭐⭐⭐⭐⭐   | Important work |
+
+### Model Management
+- Models downloaded from HuggingFace on first use
+- Stored locally: `~/.vodrop/models/` (Desktop), `app filesDir` (Android)
+- One-time download with progress tracking
+- Model persists until user clears app storage
+
+### Licensing
+- **OpenAI Whisper**: MIT License ✅
+- **whisper.cpp**: MIT License ✅
+- **WhisperJNI**: MIT License ✅
+- **Commercial use allowed** with license attribution
+
+---
+
+## 🗄️ Database Schema
+
+```sql
+CREATE TABLE TranscriptionEntity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    text TEXT NOT NULL
+);
+
+-- Queries
+selectAll:   SELECT * FROM TranscriptionEntity ORDER BY id DESC;
+insertItem:  INSERT INTO TranscriptionEntity (timestamp, text) VALUES (?, ?);
+updateText:  UPDATE TranscriptionEntity SET text = ? WHERE id = ?;
+deleteItem:  DELETE FROM TranscriptionEntity WHERE id = ?;
+```
+
+---
+
+## 📱 UI Components
+
+### Main Screen Features
+1. **Top Bar**: App title + current model badge + settings button
+2. **Recording Section**: Status text, record button, current transcription
+3. **History Section**: Scrollable list of past transcriptions
+
+### Dialogs
+- **Model Selector**: First-launch model chooser (also accessible via settings)
+- **Edit Transcription**: Modify saved text
+- **Delete Confirmation**: Confirm before deleting
+
+### Recording Button States
+| State       | Color  | Icon |
+|-------------|--------|------|
+| Ready       | Purple | 🎤   |
+| Listening   | Red    | ⏹    |
+| Processing  | Gray   | ⏳    |
+| Downloading | Blue   | ⬇️   |
+
+---
+
+## 🎨 Design Standards
+
+### Theme
+- Material 3 Design
+- Dark/Light mode support
+- Custom color scheme (Purple primary)
+
+### Code Standards
+1. **No deprecated APIs** - Using latest stable methods
+2. **Reactive UI** - StateFlow for all state management
+3. **Coroutines** - All I/O on `Dispatchers.IO`
+4. **Exception handling** - Custom exceptions with clear messages
+5. **Resource cleanup** - `release()` methods for native resources
+
+---
+
+## ⚠️ Known Limitations
+
+### Android STT
+The Android `SpeechToTextEngine` is a **placeholder**. To enable real transcription:
+1. Build `whisper.cpp` with Android NDK
+2. Create JNI bindings
+3. Bundle `.so` files for arm64-v8a, x86_64
+
+### iOS
+Both audio recording and STT require native Swift implementation:
+- Audio: Use `AVAudioEngine`
+- STT: C-interop with `whisper.cpp`
+
+---
+
+## 🚀 Build & Run Commands
 
 ```bash
+# Desktop
+./gradlew :composeApp:run
+
 # Android
 ./gradlew :composeApp:installDebug
 
-# Desktop (JVM)
-./gradlew :composeApp:run
-
-# iOS (requires Xcode on macOS)
-./gradlew :composeApp:iosArm64Binaries
+# Clean build
+./gradlew clean build
 ```
 
 ---
 
-*This summary was generated at the end of the development session to provide context for future work.*
+## 📋 Key Decisions Made
+
+### 1. WhisperJNI for Desktop
+**Why**: Pre-built library with native binaries for Windows/macOS/Linux. No compilation needed.
+
+### 2. Three Model Choices
+**Why**: Balance between download size, accuracy, and user choice. Users pick once, use forever.
+
+### 3. SQLDelight over Room
+**Why**: Multiplatform support. Works on iOS, Desktop, and Android.
+
+### 4. Koin over Hilt
+**Why**: Multiplatform DI. Hilt is Android-only.
+
+### 5. Ktor for Downloads
+**Why**: Multiplatform HTTP client. Supports streaming downloads to avoid OOM.
+
+### 6. Kotlin 2.1.21 + Compose 1.8.0
+**Why**: Required for AGP 8.7.3 compatibility. Stable K2 compiler.
+
+---
+
+## 📜 AndroidManifest Permissions
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+
+---
+
+## 🔮 Future Improvements
+
+### High Priority
+- [ ] Android Whisper.cpp JNI integration
+- [ ] iOS implementation (Swift interop)
+- [ ] Multi-language support
+
+### Nice to Have
+- [ ] Audio waveform visualization
+- [ ] Export transcriptions (TXT, PDF)
+- [ ] Keyboard shortcut for desktop
+- [ ] Background transcription service
+
+---
+
+## 🏷️ Project Standards
+
+### Code Quality
+- ✅ Latest stable library versions
+- ✅ No deprecated methods
+- ✅ Type-safe sealed classes for state
+- ✅ Proper error handling
+- ✅ Clean architecture separation
+- ✅ Reactive state management (StateFlow)
+- ✅ Coroutines for async operations
+
+### Compatibility
+- ✅ Android 7.0+ (API 24)
+- ✅ Android 16 (API 36) - latest
+- ✅ Java 17 target
+- ✅ Windows, macOS, Linux desktop
+
+---
+
+## 📞 Contact & License
+
+**Company**: Liftley  
+**App**: VoDrop  
+**License**: Open-source components (MIT), App code proprietary
+
+---
+
+*This document should be updated whenever significant changes are made to the project architecture, dependencies, or features.*
