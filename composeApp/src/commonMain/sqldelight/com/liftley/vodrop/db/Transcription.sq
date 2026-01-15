@@ -1,0 +1,18 @@
+CREATE TABLE Transcription (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    text TEXT NOT NULL
+);
+
+selectAll:
+SELECT *
+FROM Transcription
+ORDER BY id DESC;
+
+insertItem:
+INSERT INTO Transcription(timestamp, text)
+VALUES (?, ?);
+
+deleteItem:
+DELETE FROM Transcription
+WHERE id = ?;

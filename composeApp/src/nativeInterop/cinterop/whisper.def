@@ -1,0 +1,2 @@
+package = com.liftley.vodrop.cinterop.whisper
+headers = whisper.h
