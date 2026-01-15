@@ -1,6 +1,7 @@
 package com.liftley.vodrop.stt
 
 import android.content.Context
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
@@ -19,8 +20,15 @@ import org.koin.core.component.inject
 import java.io.File
 import java.io.FileOutputStream
 
+private const val LOG_TAG = "AndroidSTTEngine"
+
 /**
  * Android Speech-to-Text engine using native Whisper.cpp.
+ *
+ * Uses quantized multilingual models for:
+ * - Better accuracy with accents
+ * - Faster inference
+ * - Smaller download sizes
  */
 class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
@@ -56,21 +64,30 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         val sizeBytes: Long
     )
 
+    /**
+     * Get model info - using QUANTIZED MULTILINGUAL models for:
+     * - Better accent support
+     * - Faster inference (2-3x faster than fp16)
+     * - Smaller downloads
+     */
     private fun getModelInfo(model: WhisperModel): ModelInfo = when (model) {
         WhisperModel.FAST -> ModelInfo(
+            // Tiny English - smallest and fastest
             url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
             fileName = "ggml-tiny.en.bin",
             sizeBytes = 75_000_000L
         )
         WhisperModel.BALANCED -> ModelInfo(
-            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-            fileName = "ggml-base.en.bin",
-            sizeBytes = 142_000_000L
+            // Base MULTILINGUAL quantized - better with accents
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
+            fileName = "ggml-base-q5_1.bin",
+            sizeBytes = 57_000_000L
         )
         WhisperModel.QUALITY -> ModelInfo(
-            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-            fileName = "ggml-small.en.bin",
-            sizeBytes = 466_000_000L
+            // Small MULTILINGUAL quantized - best quality for mobile
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
+            fileName = "ggml-small-q5_1.bin",
+            sizeBytes = 181_000_000L
         )
     }
 
@@ -91,26 +108,48 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
                     if (!modelFile.exists()) {
                         downloadModel(info, modelFile)
+                    } else {
+                        // Verify file size
+                        val fileSize = modelFile.length()
+                        Log.d(LOG_TAG, "Model file exists, size: $fileSize bytes")
+                        if (fileSize < info.sizeBytes * 0.9) {
+                            // File seems corrupted/incomplete, re-download
+                            Log.w(LOG_TAG, "Model file seems incomplete, re-downloading...")
+                            modelFile.delete()
+                            downloadModel(info, modelFile)
+                        }
                     }
 
                     _modelState.value = ModelState.Loading
 
                     // Release previous context if any
                     if (nativeContext != 0L) {
+                        Log.d(LOG_TAG, "Releasing previous native context")
                         WhisperJni.release(nativeContext)
                         nativeContext = 0L
                     }
 
+                    // Log system info before loading
+                    try {
+                        val sysInfo = WhisperJni.getSystemInfo()
+                        Log.d(LOG_TAG, "Whisper System Info: $sysInfo")
+                    } catch (e: Exception) {
+                        Log.w(LOG_TAG, "Failed to get system info: ${e.message}")
+                    }
+
                     // Initialize native whisper
+                    Log.d(LOG_TAG, "Initializing native context from: ${modelFile.absolutePath}")
                     nativeContext = WhisperJni.init(modelFile.absolutePath)
 
                     if (nativeContext == 0L) {
-                        throw SpeechToTextException("Failed to load native model")
+                        throw SpeechToTextException("Failed to load native model - context is null")
                     }
 
+                    Log.d(LOG_TAG, "Native context initialized successfully: $nativeContext")
                     _modelState.value = ModelState.Ready
 
                 } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Failed to load model", e)
                     val errorMsg = "Failed to load model: ${e.message}"
                     _modelState.value = ModelState.Error(errorMsg)
                     throw SpeechToTextException(errorMsg, e)
@@ -120,6 +159,7 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     }
 
     private suspend fun downloadModel(info: ModelInfo, targetFile: File) {
+        Log.d(LOG_TAG, "Starting model download: ${info.url}")
         _modelState.value = ModelState.Downloading(0f)
 
         val tempFile = File(targetFile.parent, "${targetFile.name}.tmp")
@@ -150,12 +190,16 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                 }
             }
 
+            Log.d(LOG_TAG, "Download complete, moving temp file to target")
             if (!tempFile.renameTo(targetFile)) {
                 tempFile.delete()
                 throw SpeechToTextException("Failed to save model file")
             }
 
+            Log.d(LOG_TAG, "Model saved successfully: ${targetFile.absolutePath}, size: ${targetFile.length()}")
+
         } catch (e: Exception) {
+            Log.e(LOG_TAG, "Download failed", e)
             tempFile.delete()
             throw e
         }
@@ -163,13 +207,22 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
     override fun isModelAvailable(model: WhisperModel): Boolean {
         val info = getModelInfo(model)
-        return File(modelDirectory, info.fileName).exists()
+        val file = File(modelDirectory, info.fileName)
+        return file.exists() && file.length() > info.sizeBytes * 0.9
     }
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
         if (nativeContext == 0L || _modelState.value !is ModelState.Ready) {
+            Log.e(LOG_TAG, "Cannot transcribe: model not loaded (context=$nativeContext, state=${_modelState.value})")
             return TranscriptionResult.Error("Model not loaded")
         }
+
+        if (audioData.isEmpty()) {
+            Log.e(LOG_TAG, "Cannot transcribe: empty audio data")
+            return TranscriptionResult.Error("No audio data provided")
+        }
+
+        Log.d(LOG_TAG, "Starting transcription of ${audioData.size} bytes")
 
         return withContext(Dispatchers.Default) {
             // Lock to prevent model switching during transcription
@@ -184,10 +237,40 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                         return@withLock TranscriptionResult.Error("Model was unloaded")
                     }
 
-                    // Call native transcription
-                    val text = WhisperJni.transcribe(ctx, audioData)
+                    // Convert PCM bytes to float samples
+                    // Audio format: 16-bit signed PCM, little-endian, 16kHz, mono
+                    val numSamples = audioData.size / 2
+                    val samples = FloatArray(numSamples)
+
+                    for (i in 0 until numSamples) {
+                        val low = audioData[2 * i].toInt() and 0xFF
+                        val high = audioData[2 * i + 1].toInt()
+                        val sample = (high shl 8) or low
+                        samples[i] = sample.toShort() / 32768.0f
+                    }
+
+                    val audioDuration = numSamples / 16000.0f
+                    Log.d(LOG_TAG, "Converted to $numSamples float samples (${audioDuration}s audio)")
+
+                    // Validate samples - check if audio isn't silent
+                    val maxSample = samples.maxOrNull() ?: 0f
+                    val minSample = samples.minOrNull() ?: 0f
+                    Log.d(LOG_TAG, "Sample range: [$minSample, $maxSample]")
+
+                    if (maxSample < 0.01f && minSample > -0.01f) {
+                        Log.w(LOG_TAG, "Audio appears to be silent or very quiet")
+                        return@withLock TranscriptionResult.Success(
+                            text = "(No speech detected - audio too quiet)",
+                            durationMs = System.currentTimeMillis() - startTime
+                        )
+                    }
+
+                    // Call native transcription with float array
+                    Log.d(LOG_TAG, "Calling native transcribe with context=$ctx")
+                    val text = WhisperJni.transcribe(ctx, samples)
 
                     val durationMs = System.currentTimeMillis() - startTime
+                    Log.d(LOG_TAG, "Transcription completed in ${durationMs}ms: '$text'")
 
                     if (text.isBlank()) {
                         TranscriptionResult.Success(
@@ -196,11 +279,12 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                         )
                     } else {
                         TranscriptionResult.Success(
-                            text = text.trim(),
+                            text = formatTranscription(text),  // <-- Apply formatting here
                             durationMs = durationMs
                         )
                     }
                 } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Transcription error", e)
                     TranscriptionResult.Error("Transcription error: ${e.message}")
                 } finally {
                     isTranscribing = false
@@ -208,11 +292,46 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
             }
         }
     }
+    /**
+     * Simple text formatting - just cleans up without changing meaning.
+     * - Trims whitespace
+     * - Capitalizes first letter of sentences
+     * - Ensures ending punctuation
+     */
+    private fun formatTranscription(text: String): String {
+        if (text.isBlank()) return text
+
+        var result = text.trim()
+
+        // Remove extra spaces
+        result = result.replace(Regex("\\s+"), " ")
+
+        // Capitalize first letter
+        result = result.replaceFirstChar { it.uppercaseChar() }
+
+        // Capitalize after . ! ?
+        result = result.replace(Regex("([.!?])\\s+([a-z])")) { match ->
+            "${match.groupValues[1]} ${match.groupValues[2].uppercase()}"
+        }
+
+        // Add period at end if no punctuation
+        if (!result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
+            result = "$result."
+        }
+
+        return result
+    }
 
     override fun release() {
+        Log.d(LOG_TAG, "Releasing engine resources")
         // Only release if not transcribing
         if (!isTranscribing && nativeContext != 0L) {
-            WhisperJni.release(nativeContext)
+            try {
+                WhisperJni.release(nativeContext)
+                Log.d(LOG_TAG, "Native context released")
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Error releasing native context", e)
+            }
             nativeContext = 0L
         }
         httpClient.close()

@@ -40,7 +40,7 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
         JNIEnv* env,
         jobject thiz,
         jlong contextPtr,
-        jbyteArray pcmData
+        jfloatArray audioData
 ) {
     if (contextPtr == 0L) {
         LOGE("Context is null!");
@@ -49,53 +49,71 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
 
     struct whisper_context* ctx = reinterpret_cast<whisper_context*>(contextPtr);
 
-    jsize len = env->GetArrayLength(pcmData);
-    LOGI("Received %d bytes of audio data", len);
+    jfloat* samples = env->GetFloatArrayElements(audioData, nullptr);
+    jsize numSamples = env->GetArrayLength(audioData);
 
-    if (len == 0) {
-        LOGE("Empty audio data!");
+    LOGI("Received %d float samples", numSamples);
+
+    if (numSamples == 0 || samples == nullptr) {
+        LOGE("Empty or null audio data!");
+        if (samples != nullptr) {
+            env->ReleaseFloatArrayElements(audioData, samples, JNI_ABORT);
+        }
         return env->NewStringUTF("");
     }
-
-    jbyte* bytes = env->GetByteArrayElements(pcmData, nullptr);
-    if (bytes == nullptr) {
-        LOGE("Failed to get byte array elements!");
-        return env->NewStringUTF("");
-    }
-
-    // Convert to samples
-    int numSamples = len / 2;
-    LOGI("Converting to %d float samples...", numSamples);
-
-    std::vector<float> samples(numSamples);
-    for (int i = 0; i < numSamples; ++i) {
-        int16_t sample = ((int16_t)(uint8_t)bytes[2*i]) |
-                ((int16_t)(uint8_t)bytes[2*i + 1] << 8);
-        samples[i] = sample / 32768.0f;
-    }
-
-    env->ReleaseByteArrayElements(pcmData, bytes, JNI_ABORT);
 
     float audioDuration = (float)numSamples / 16000.0f;
     LOGI("Audio duration: %.2f seconds", audioDuration);
 
-    // Setup parameters - simplified
+    // ============================================
+    // SPEED-OPTIMIZED SETTINGS
+    // ============================================
+
+    // GREEDY is faster than BEAM_SEARCH
     struct whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-    params.language = "en";
-    params.translate = false;
-    params.no_context = true;
-    params.single_segment = true;
+
+    // Basic settings
+    params.print_realtime = false;
     params.print_progress = false;
     params.print_timestamps = false;
-    params.print_realtime = false;
     params.print_special = false;
-    params.n_threads = 1;  // Single thread for safety
+    params.translate = false;
+    params.n_threads = 4;
+    params.offset_ms = 0;
+    params.single_segment = false;
 
-    LOGI("Starting whisper_full transcription with %d samples...", numSamples);
+    // ============================================
+    // ACCURACY + SPEED OPTIMIZATIONS
+    // ============================================
 
-    int result = whisper_full(ctx, params, samples.data(), samples.size());
+    // Set language explicitly (faster than auto-detect)
+    params.language = "en";
+
+    // Keep context for better accuracy within same recording
+    params.no_context = false;
+
+    // Greedy sampling - just pick best, no beam search overhead
+    params.greedy.best_of = 1;
+
+    // Low temperature = more accurate, less creative
+    params.temperature = 0.0f;
+
+    // Suppress blank/silence tokens for cleaner output
+    params.suppress_blank = true;
+    params.suppress_nst = true;  // Suppress non-speech tokens
+
+    LOGI("Using GREEDY mode with %d threads, language=en", params.n_threads);
+
+    whisper_reset_timings(ctx);
+
+    LOGI("Starting whisper_full transcription...");
+
+    int result = whisper_full(ctx, params, samples, numSamples);
 
     LOGI("whisper_full returned: %d", result);
+    whisper_print_timings(ctx);
+
+    env->ReleaseFloatArrayElements(audioData, samples, JNI_ABORT);
 
     if (result != 0) {
         LOGE("Transcription failed with code: %d", result);
@@ -130,6 +148,16 @@ Java_com_liftley_vodrop_stt_WhisperJni_release(
         whisper_free(ctx);
         LOGI("Whisper context released");
     }
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_liftley_vodrop_stt_WhisperJni_getSystemInfo(
+        JNIEnv* env,
+        jobject thiz
+) {
+    const char* sysinfo = whisper_print_system_info();
+    LOGI("System info: %s", sysinfo);
+    return env->NewStringUTF(sysinfo);
 }
 
 }
