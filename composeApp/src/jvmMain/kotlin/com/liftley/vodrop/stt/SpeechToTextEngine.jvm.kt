@@ -50,7 +50,7 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
 
         withContext(Dispatchers.IO) {
             try {
-                val modelFile = File(modelDirectory, model.ggmlFileName)
+                val modelFile = File(modelDirectory, model.fileName)
 
                 if (!modelFile.exists()) {
                     downloadModel(model, modelFile)
@@ -82,12 +82,12 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
             targetFile.parentFile?.mkdirs()
             val tempFile = File(targetFile.parent, "${targetFile.name}.tmp")
 
-            httpClient.prepareGet(model.ggmlDownloadUrl).execute { response ->
+            httpClient.prepareGet(model.downloadUrl).execute { response ->
                 if (!response.status.isSuccess()) {
                     throw SpeechToTextException("Download failed: HTTP ${response.status.value}")
                 }
 
-                val contentLength = response.contentLength() ?: model.ggmlSizeBytes
+                val contentLength = response.contentLength() ?: model.sizeBytes
                 val channel: ByteReadChannel = response.bodyAsChannel()
 
                 var downloaded = 0L
@@ -120,7 +120,7 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
     }
 
     override fun isModelAvailable(model: WhisperModel): Boolean {
-        return File(modelDirectory, model.ggmlFileName).exists()
+        return File(modelDirectory, model.fileName).exists()
     }
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
@@ -133,10 +133,8 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
             try {
                 val startTime = System.currentTimeMillis()
 
-                // Convert bytes to float samples
                 val samples = convertBytesToFloatSamples(audioData)
 
-                // Create parameters
                 val params = WhisperFullParams().apply {
                     language = "en"
                     translate = false
@@ -146,13 +144,11 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
                     printTimestamps = false
                 }
 
-                // Run transcription
                 val result = whisperJNI.full(context, params, samples, samples.size)
                 if (result != 0) {
                     return@withContext TranscriptionResult.Error("Transcription failed with code: $result")
                 }
 
-                // Get text from all segments
                 val numSegments = whisperJNI.fullNSegments(context)
                 val text = StringBuilder()
                 for (i in 0 until numSegments) {

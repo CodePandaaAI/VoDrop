@@ -39,11 +39,7 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
-
-            // WhisperKit for Android STT
-            implementation(libs.whisperkit.android)
-            implementation(libs.qnn.runtime)
-            implementation(libs.qnn.litert.delegate)
+            // Native whisper.cpp - built via CMake, no external dependency
         }
 
         commonMain.dependencies {
@@ -95,8 +91,18 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Only build for ARM64 (most modern phones)
+        // You can add "armeabi-v7a" for older 32-bit phones
         ndk {
-            abiFilters += listOf("arm64-v8a")  // WhisperKit only supports arm64
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // Tell Gradle to use CMake for native code
+    externalNativeBuild {
+        cmake {
+            path = file("src/androidMain/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -104,7 +110,7 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // Required for WhisperKit
+        // Required for native libraries
         jniLibs {
             useLegacyPackaging = true
         }

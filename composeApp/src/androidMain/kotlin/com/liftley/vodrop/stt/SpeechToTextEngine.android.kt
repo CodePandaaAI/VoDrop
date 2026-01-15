@@ -1,24 +1,27 @@
 package com.liftley.vodrop.stt
 
 import android.content.Context
-import com.argmaxinc.whisperkit.ExperimentalWhisperKit
-import com.argmaxinc.whisperkit.WhisperKit
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
-import kotlin.coroutines.resume
+import java.io.FileOutputStream
 
 /**
- * Android Speech-to-Text engine using WhisperKitAndroid
- * Uses on-device Whisper models optimized for Qualcomm processors
+ * Android Speech-to-Text engine using native Whisper.cpp.
  */
-@OptIn(ExperimentalWhisperKit::class)
 class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
     private val context: Context by inject()
@@ -29,154 +32,190 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     private var _currentModel: WhisperModel = WhisperModel.DEFAULT
     override val currentModel: WhisperModel get() = _currentModel
 
-    private var whisperKit: WhisperKit? = null
-    private var isInitialized = false
-    private var lastTranscriptionResult: String = ""
+    // Native context pointer (0 = not loaded)
+    private var nativeContext: Long = 0L
+
+    // Mutex to prevent concurrent access to native context
+    private val contextMutex = Mutex()
+
+    // Flag to track if transcription is in progress
+    @Volatile
+    private var isTranscribing = false
+
+    private val httpClient = HttpClient(OkHttp) {
+        expectSuccess = true
+    }
 
     private val modelDirectory: File by lazy {
-        File(context.filesDir, "whisperkit_models").apply { mkdirs() }
+        File(context.filesDir, "whisper_models").apply { mkdirs() }
+    }
+
+    private data class ModelInfo(
+        val url: String,
+        val fileName: String,
+        val sizeBytes: Long
+    )
+
+    private fun getModelInfo(model: WhisperModel): ModelInfo = when (model) {
+        WhisperModel.FAST -> ModelInfo(
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+            fileName = "ggml-tiny.en.bin",
+            sizeBytes = 75_000_000L
+        )
+        WhisperModel.BALANCED -> ModelInfo(
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+            fileName = "ggml-base.en.bin",
+            sizeBytes = 142_000_000L
+        )
+        WhisperModel.QUALITY -> ModelInfo(
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+            fileName = "ggml-small.en.bin",
+            sizeBytes = 466_000_000L
+        )
     }
 
     override suspend fun loadModel(model: WhisperModel) {
+        // Don't allow model switch while transcribing
+        if (isTranscribing) {
+            throw SpeechToTextException("Cannot switch models while transcription is in progress")
+        }
+
         _currentModel = model
+        val info = getModelInfo(model)
 
         withContext(Dispatchers.IO) {
-            try {
-                _modelState.value = ModelState.Downloading(0f)
+            // Lock to prevent concurrent access
+            contextMutex.withLock {
+                try {
+                    val modelFile = File(modelDirectory, info.fileName)
 
-                // Clean up previous instance
-                whisperKit?.deinitialize()
-                whisperKit = null
-                isInitialized = false
-
-                // Build WhisperKit with the selected model
-                val kit = WhisperKit.Builder()
-                    .setModel(getWhisperKitModelConstant(model))
-                    .setApplicationContext(context.applicationContext)
-                    .setCallback { what, result ->
-                        handleCallback(what, result)
+                    if (!modelFile.exists()) {
+                        downloadModel(info, modelFile)
                     }
-                    .build()
 
-                whisperKit = kit
+                    _modelState.value = ModelState.Loading
 
-                // Load the model (downloads if needed)
-                kit.loadModel().collect { progress ->
-                    _modelState.value = ModelState.Downloading(progress.coerceIn(0f, 1f))
+                    // Release previous context if any
+                    if (nativeContext != 0L) {
+                        WhisperJni.release(nativeContext)
+                        nativeContext = 0L
+                    }
+
+                    // Initialize native whisper
+                    nativeContext = WhisperJni.init(modelFile.absolutePath)
+
+                    if (nativeContext == 0L) {
+                        throw SpeechToTextException("Failed to load native model")
+                    }
+
+                    _modelState.value = ModelState.Ready
+
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to load model: ${e.message}"
+                    _modelState.value = ModelState.Error(errorMsg)
+                    throw SpeechToTextException(errorMsg, e)
+                }
+            }
+        }
+    }
+
+    private suspend fun downloadModel(info: ModelInfo, targetFile: File) {
+        _modelState.value = ModelState.Downloading(0f)
+
+        val tempFile = File(targetFile.parent, "${targetFile.name}.tmp")
+
+        try {
+            httpClient.prepareGet(info.url).execute { response ->
+                if (!response.status.isSuccess()) {
+                    throw SpeechToTextException("Download failed: HTTP ${response.status.value}")
                 }
 
-                _modelState.value = ModelState.Loading
+                val contentLength = response.contentLength() ?: info.sizeBytes
+                val channel: ByteReadChannel = response.bodyAsChannel()
 
-                // Initialize with audio parameters (16kHz, mono)
-                kit.init(
-                    frequency = 16000,
-                    channels = 1,
-                    duration = 0  // No limit
-                )
+                var downloaded = 0L
+                val buffer = ByteArray(8192)
 
-                isInitialized = true
-                _modelState.value = ModelState.Ready
-
-            } catch (e: Exception) {
-                val error = "Failed to load model: ${e.message}"
-                _modelState.value = ModelState.Error(error)
-                throw SpeechToTextException(error, e)
+                FileOutputStream(tempFile).use { output ->
+                    while (!channel.isClosedForRead) {
+                        val bytesRead = channel.readAvailable(buffer)
+                        if (bytesRead > 0) {
+                            output.write(buffer, 0, bytesRead)
+                            downloaded += bytesRead
+                            val progress = (downloaded.toFloat() / contentLength).coerceIn(0f, 1f)
+                            _modelState.value = ModelState.Downloading(progress)
+                        }
+                    }
+                    output.flush()
+                }
             }
-        }
-    }
 
-    private fun getWhisperKitModelConstant(model: WhisperModel): String {
-        return when (model) {
-            WhisperModel.FAST -> WhisperKit.OPENAI_TINY_EN
-            WhisperModel.BALANCED -> WhisperKit.OPENAI_BASE_EN
-            WhisperModel.QUALITY -> WhisperKit.OPENAI_SMALL_EN
-        }
-    }
+            if (!tempFile.renameTo(targetFile)) {
+                tempFile.delete()
+                throw SpeechToTextException("Failed to save model file")
+            }
 
-    private fun handleCallback(what: Int, result: WhisperKit.TextOutputCallback.Result) {
-        when (what) {
-            WhisperKit.TextOutputCallback.MSG_INIT -> {
-                // Model initialized
-            }
-            WhisperKit.TextOutputCallback.MSG_TEXT_OUT -> {
-                // Store the transcription result
-                lastTranscriptionResult = result.text
-            }
-            WhisperKit.TextOutputCallback.MSG_CLOSE -> {
-                // Cleanup
-            }
+        } catch (e: Exception) {
+            tempFile.delete()
+            throw e
         }
     }
 
     override fun isModelAvailable(model: WhisperModel): Boolean {
-        // WhisperKit handles model caching internally
-        // We check if we've previously initialized with this model
-        return whisperKit != null && _currentModel == model && isInitialized
+        val info = getModelInfo(model)
+        return File(modelDirectory, info.fileName).exists()
     }
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
-        val kit = whisperKit
-
-        if (kit == null || !isInitialized || _modelState.value !is ModelState.Ready) {
+        if (nativeContext == 0L || _modelState.value !is ModelState.Ready) {
             return TranscriptionResult.Error("Model not loaded")
         }
 
         return withContext(Dispatchers.Default) {
-            try {
-                val startTime = System.currentTimeMillis()
+            // Lock to prevent model switching during transcription
+            contextMutex.withLock {
+                isTranscribing = true
+                try {
+                    val startTime = System.currentTimeMillis()
 
-                // Reset the result
-                lastTranscriptionResult = ""
+                    // Check context again after acquiring lock
+                    val ctx = nativeContext
+                    if (ctx == 0L) {
+                        return@withLock TranscriptionResult.Error("Model was unloaded")
+                    }
 
-                // Transcribe the audio data
-                kit.transcribe(audioData)
+                    // Call native transcription
+                    val text = WhisperJni.transcribe(ctx, audioData)
 
-                // Wait a moment for callback to be processed
-                // WhisperKit uses callbacks so we need to wait
-                val result = waitForTranscription(maxWaitMs = 30000)
+                    val durationMs = System.currentTimeMillis() - startTime
 
-                val durationMs = System.currentTimeMillis() - startTime
-
-                if (result.isBlank()) {
-                    TranscriptionResult.Success(
-                        text = "(No speech detected)",
-                        durationMs = durationMs
-                    )
-                } else {
-                    TranscriptionResult.Success(
-                        text = result.trim(),
-                        durationMs = durationMs
-                    )
+                    if (text.isBlank()) {
+                        TranscriptionResult.Success(
+                            text = "(No speech detected)",
+                            durationMs = durationMs
+                        )
+                    } else {
+                        TranscriptionResult.Success(
+                            text = text.trim(),
+                            durationMs = durationMs
+                        )
+                    }
+                } catch (e: Exception) {
+                    TranscriptionResult.Error("Transcription error: ${e.message}")
+                } finally {
+                    isTranscribing = false
                 }
-            } catch (e: Exception) {
-                TranscriptionResult.Error("Transcription error: ${e.message}")
             }
         }
     }
 
-    private suspend fun waitForTranscription(maxWaitMs: Long): String {
-        return suspendCancellableCoroutine { continuation ->
-            var waited = 0L
-            val checkInterval = 100L
-
-            Thread {
-                while (waited < maxWaitMs) {
-                    if (lastTranscriptionResult.isNotBlank()) {
-                        continuation.resume(lastTranscriptionResult)
-                        return@Thread
-                    }
-                    Thread.sleep(checkInterval)
-                    waited += checkInterval
-                }
-                continuation.resume(lastTranscriptionResult)
-            }.start()
-        }
-    }
-
     override fun release() {
-        whisperKit?.deinitialize()
-        whisperKit = null
-        isInitialized = false
+        // Only release if not transcribing
+        if (!isTranscribing && nativeContext != 0L) {
+            WhisperJni.release(nativeContext)
+            nativeContext = 0L
+        }
+        httpClient.close()
         _modelState.value = ModelState.NotLoaded
     }
 }

@@ -3,51 +3,43 @@ package com.liftley.vodrop.stt
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Available Whisper models - mapped to platform-specific implementations
- * Desktop: Whisper.cpp GGML models
- * Android: WhisperKit models (Qualcomm optimized)
+ * Available Whisper models - same GGML models for both Desktop and Android
  */
 enum class WhisperModel(
     val displayName: String,
     val emoji: String,
     val description: String,
     val sizeDisplay: String,
-    // Desktop-specific
-    val ggmlFileName: String,
-    val ggmlDownloadUrl: String,
-    val ggmlSizeBytes: Long,
-    // Android-specific (WhisperKit model ID)
-    val whisperKitModelId: String
+    val fileName: String,
+    val downloadUrl: String,
+    val sizeBytes: Long
 ) {
     FAST(
         displayName = "Fast",
         emoji = "⚡",
         description = "Quick results, good for short notes",
         sizeDisplay = "~75 MB",
-        ggmlFileName = "ggml-tiny.en.bin",
-        ggmlDownloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
-        ggmlSizeBytes = 75_000_000L,
-        whisperKitModelId = "openai/whisper-tiny.en"
+        fileName = "ggml-tiny.en.bin",
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+        sizeBytes = 75_000_000L
     ),
     BALANCED(
         displayName = "Balanced",
         emoji = "⚖️",
         description = "Great accuracy with good speed",
         sizeDisplay = "~150 MB",
-        ggmlFileName = "ggml-base.en.bin",
-        ggmlDownloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-        ggmlSizeBytes = 142_000_000L,
-        whisperKitModelId = "openai/whisper-base.en"
+        fileName = "ggml-base.en.bin",
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+        sizeBytes = 142_000_000L
     ),
     QUALITY(
         displayName = "Quality",
         emoji = "✨",
         description = "Best accuracy for important work",
         sizeDisplay = "~466 MB",
-        ggmlFileName = "ggml-small.en.bin",
-        ggmlDownloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-        ggmlSizeBytes = 466_000_000L,
-        whisperKitModelId = "openai/whisper-small.en"
+        fileName = "ggml-small.en.bin",
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+        sizeBytes = 466_000_000L
     );
 
     companion object {

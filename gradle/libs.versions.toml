@@ -7,8 +7,6 @@ androidx-activity = "1.10.0"
 androidx-appcompat = "1.7.0"
 androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
-whisperkit = "0.3.3"
-qnn-runtime = "2.34.0"
 
 # Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
 androidx-lifecycle = "2.8.4"
@@ -63,11 +61,6 @@ accompanist-permissions = { module = "com.google.accompanist:accompanist-permiss
 
 # WhisperJNI for Desktop
 whisper-jni = { module = "io.github.givimad:whisper-jni", version.ref = "whisper-jni" }
-
-# WhisperKit for Android STT
-whisperkit-android = { module = "com.argmaxinc:whisperkit", version.ref = "whisperkit" }
-qnn-runtime = { module = "com.qualcomm.qnn:qnn-runtime", version.ref = "qnn-runtime" }
-qnn-litert-delegate = { module = "com.qualcomm.qnn:qnn-litert-delegate", version.ref = "qnn-runtime" }
 
 # Ktor for model downloading
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
