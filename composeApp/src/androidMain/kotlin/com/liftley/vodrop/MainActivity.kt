@@ -11,8 +11,8 @@ import com.liftley.vodrop.auth.FirebaseAuthManager
 import com.liftley.vodrop.auth.SubscriptionManager
 import com.liftley.vodrop.di.appModule
 import com.liftley.vodrop.di.platformModule
-import com.liftley.vodrop.ui.MainScreen
-import com.liftley.vodrop.ui.MainViewModel
+import com.liftley.vodrop.ui.main.MainScreen
+import com.liftley.vodrop.ui.main.MainViewModel
 import com.liftley.vodrop.ui.theme.VoDropTheme
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext

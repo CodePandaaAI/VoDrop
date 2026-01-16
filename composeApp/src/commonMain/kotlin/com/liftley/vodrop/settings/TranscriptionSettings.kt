@@ -1,7 +1,5 @@
 package com.liftley.vodrop.settings
 
-import com.liftley.vodrop.stt.WhisperModel
-
 /**
  * Transcription mode for Pro users
  */

@@ -2,9 +2,9 @@ package com.liftley.vodrop.di
 
 import com.liftley.vodrop.auth.FirebaseAuthManager
 import com.liftley.vodrop.auth.SubscriptionManager
-import com.liftley.vodrop.llm.GeminiCleanupService
-import com.liftley.vodrop.llm.LLMConfig
-import com.liftley.vodrop.llm.TextCleanupService
+import com.liftley.vodrop.data.llm.GeminiCleanupService
+import com.liftley.vodrop.data.llm.LLMConfig
+import com.liftley.vodrop.data.llm.TextCleanupService
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import org.koin.android.ext.koin.androidContext
