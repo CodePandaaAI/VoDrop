@@ -68,6 +68,15 @@ interface SpeechToTextEngine {
     fun isModelAvailable(model: WhisperModel = WhisperModel.DEFAULT): Boolean
     suspend fun transcribe(audioData: ByteArray): TranscriptionResult
     fun release()
+
+    /**
+     * ⚡ BATTERY OPTIMIZATION: Check and unload model if inactive for too long.
+     * Call this periodically to free memory when app is idle.
+     * Default implementation does nothing (for platforms that don't need it).
+     */
+    fun checkAndUnloadIfInactive() {
+        // Default: no-op. Android implementation overrides this.
+    }
 }
 
 class SpeechToTextException(

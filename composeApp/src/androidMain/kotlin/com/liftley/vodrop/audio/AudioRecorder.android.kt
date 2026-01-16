@@ -22,6 +22,8 @@ import kotlin.math.log10
 /**
  * Android audio recorder using AudioRecord API
  * Produces 16kHz, mono, 16-bit PCM audio for Whisper compatibility
+ *
+ * OPTIMIZED: Pre-sized buffer to avoid reallocations
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
@@ -34,7 +36,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     @Volatile
     private var isCurrentlyRecording = false
     private var recordingThread: Thread? = null
-    private val audioData = ByteArrayOutputStream()
+
+    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio (common case)
+    // 30s × 16000Hz × 2 bytes = 960,000 bytes
+    // This prevents 14+ reallocations during recording
+    private var audioData = ByteArrayOutputStream(960_000)
+
     private val lock = Any()
 
     companion object {
@@ -76,6 +83,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                         }
                     }
 
+                    // ⚡ OPTIMIZED: Reset but keep the buffer capacity
                     audioData.reset()
                     isCurrentlyRecording = true
                     audioRecord?.startRecording()
@@ -100,9 +108,11 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                             _status.value = RecordingStatus.Recording(amplitude)
                         } else if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION) {
                             _status.value = RecordingStatus.Error("Recording error: invalid operation")
+                            isCurrentlyRecording = false
                             break
                         } else if (bytesRead == AudioRecord.ERROR_BAD_VALUE) {
                             _status.value = RecordingStatus.Error("Recording error: bad value")
+                            isCurrentlyRecording = false
                             break
                         }
                     }
@@ -128,7 +138,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             }
 
             // Wait for recording thread to finish
-            recordingThread?.join(2000)
+            recordingThread?.let { thread ->
+                thread.join(2000)
+                if (thread.isAlive) {
+                    thread.interrupt()  // Force interrupt if still running
+                }
+            }
             recordingThread = null
 
             synchronized(lock) {
@@ -172,7 +187,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             sum += abs(sample).toDouble()
         }
 
-        val average = sum / samples
+        val average = if (samples > 0) sum / samples else 0.0
         val normalized = average / 32768.0
 
         return if (normalized > 0.0001) {

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "808998462431",
+    "project_id": "vodrop-liftley",
+    "storage_bucket": "vodrop-liftley.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:808998462431:android:04eb811420f33b7535da6a",
+        "android_client_info": {
+          "package_name": "com.liftley.vodrop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCg03Vm2kJexKb_AfBXfk4KSnIe5vkNQsU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

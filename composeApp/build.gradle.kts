@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqldelight)
     kotlin("plugin.serialization") version "2.1.21"
+    id("com.google.gms.google-services")
 }
 
 kotlin {
@@ -40,7 +41,13 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
-            // Native whisper.cpp - built via CMake, no external dependency
+            // Firebase Auth
+            implementation(project.dependencies.platform(libs.firebase.bom))
+            implementation(libs.firebase.auth.ktx)
+            implementation(libs.play.services.auth)
+
+            // RevenueCat
+            implementation(libs.revenuecat.purchases)
         }
 
         commonMain.dependencies {
@@ -121,6 +128,13 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // Optional: Add signing config for release
+            // signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -20,7 +20,7 @@ fun EditDialog(
     onSave: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf(transcription.text) }
+    var text by remember(transcription.id) { mutableStateOf(transcription.text) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

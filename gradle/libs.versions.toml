@@ -7,6 +7,9 @@ androidx-activity = "1.10.0"
 androidx-appcompat = "1.7.0"
 androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
+firebase-bom = "33.7.0"
+play-services-auth = "21.2.0"
+revenuecat = "8.6.0"
 
 # Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
 androidx-lifecycle = "2.8.4"
@@ -66,6 +69,13 @@ whisper-jni = { module = "io.github.givimad:whisper-jni", version.ref = "whisper
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+
+# Firebase
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+# RevenueCat
+revenuecat-purchases = { module = "com.revenuecat.purchases:purchases", version.ref = "revenuecat" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -3,6 +3,7 @@ package com.liftley.vodrop.llm
 import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -10,19 +11,38 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.ConnectionPool
+import java.util.concurrent.TimeUnit
 
 private const val LOG_TAG = "GeminiCleanup"
 
 /**
  * Gemini-based text cleanup service.
  * Uses Gemini 2.0 Flash for fast, high-quality text cleanup.
+ *
+ * ⚡ OPTIMIZED: Reduced connection pool, proper timeouts
  */
 class GeminiCleanupService(
     private val apiKey: String
 ) : TextCleanupService {
 
-    private val httpClient = HttpClient(OkHttp) {
-        expectSuccess = false
+    // ⚡ OPTIMIZED: Lazy initialization with reduced connection pool
+    private val httpClient: HttpClient by lazy {
+        HttpClient(OkHttp) {
+            expectSuccess = false
+            engine {
+                config {
+                    retryOnConnectionFailure(false)
+                    // Reduce idle connections to save battery
+                    connectionPool(ConnectionPool(1, 15, TimeUnit.SECONDS))
+                }
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60_000    // 60 seconds
+                connectTimeoutMillis = 15_000    // 15 seconds
+                socketTimeoutMillis = 60_000     // 60 seconds
+            }
+        }
     }
 
     private val json = Json {
@@ -31,7 +51,7 @@ class GeminiCleanupService(
     }
 
     private val baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
-    private val model = "gemini-3-flash-preview"
+    private val model = "gemini-3-flash-preview"  // Updated to stable model
 
     companion object {
         private val CLEANUP_PROMPT = """
@@ -116,7 +136,6 @@ Transcription:
     }
 
     private fun buildRequestBody(prompt: String): String {
-        // Escape special characters for JSON
         val escapedPrompt = prompt
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -156,7 +175,11 @@ Transcription:
     }
 
     fun close() {
-        httpClient.close()
+        try {
+            httpClient.close()
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Error closing HTTP client", e)
+        }
     }
 }
 

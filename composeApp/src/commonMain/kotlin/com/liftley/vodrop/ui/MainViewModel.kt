@@ -13,10 +13,15 @@ import com.liftley.vodrop.stt.SpeechToTextEngine
 import com.liftley.vodrop.stt.TranscriptionResult
 import com.liftley.vodrop.stt.WhisperModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -60,22 +65,27 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+    // ⚡ OPTIMIZED: Track jobs for proper cancellation
+    private var modelStateJob: Job? = null
+    private var recordingStatusJob: Job? = null
+    private var historyJob: Job? = null
+    private var inactivityCheckJob: Job? = null
+
     init {
         loadHistory()
         observeModelState()
         observeRecordingStatus()
         initializeOnStartup()
+        startInactivityChecker()
     }
 
     // ========== Initialization ==========
 
     private fun initializeOnStartup() {
         viewModelScope.launch {
-            // Check if any model is already downloaded
             val availableModel = WhisperModel.entries.firstOrNull { sttEngine.isModelAvailable(it) }
 
             if (availableModel != null) {
-                // Model exists, load it
                 _uiState.update {
                     it.copy(
                         selectedModel = availableModel,
@@ -85,20 +95,23 @@ class MainViewModel(
                 }
                 loadModel(availableModel)
             } else {
-                // First launch, show model selector
                 _uiState.update { it.copy(showModelSelector = true, isFirstLaunch = true) }
             }
         }
     }
 
     private fun observeModelState() {
-        viewModelScope.launch {
+        modelStateJob?.cancel()
+        modelStateJob = viewModelScope.launch {
             sttEngine.modelState.collect { state ->
                 _uiState.update { current ->
                     val newPhase = when (state) {
                         is ModelState.Ready -> RecordingPhase.READY
                         is ModelState.Error -> RecordingPhase.IDLE
-                        else -> current.recordingPhase
+                        // When model is unloaded, go back to IDLE
+                        is ModelState.NotLoaded -> RecordingPhase.IDLE
+                        is ModelState.Downloading -> RecordingPhase.IDLE  // Show downloading state
+                        is ModelState.Loading -> RecordingPhase.IDLE      // Show loading state
                     }
                     val error = if (state is ModelState.Error) state.message else current.error
                     current.copy(modelState = state, recordingPhase = newPhase, error = error)
@@ -108,7 +121,8 @@ class MainViewModel(
     }
 
     private fun observeRecordingStatus() {
-        viewModelScope.launch {
+        recordingStatusJob?.cancel()
+        recordingStatusJob = viewModelScope.launch {
             audioRecorder.status.collect { status ->
                 if (status is RecordingStatus.Error) {
                     _uiState.update {
@@ -119,10 +133,40 @@ class MainViewModel(
         }
     }
 
+    /**
+     * ⚡ OPTIMIZED: Use stateIn with WhileSubscribed to stop collection when UI is gone
+     */
     private fun loadHistory() {
-        viewModelScope.launch {
-            repository.getAllTranscriptions().collect { list ->
-                _uiState.update { it.copy(history = list) }
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            repository.getAllTranscriptions()
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.WhileSubscribed(5000),
+                    initialValue = emptyList()
+                )
+                .collect { list ->
+                    _uiState.update { it.copy(history = list) }
+                }
+        }
+    }
+
+    /**
+     * ⚡ OPTIMIZED: Periodic check to unload model after inactivity
+     * This saves RAM and battery when app is idle
+     */
+    private fun startInactivityChecker() {
+        inactivityCheckJob?.cancel()
+        inactivityCheckJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60_000) // Check every minute
+
+                // Only check if we're in a stable state
+                val state = _uiState.value
+                if (state.recordingPhase == RecordingPhase.READY) {
+                    // ✅ FIXED: Call via interface - each platform implements as needed
+                    sttEngine.checkAndUnloadIfInactive()
+                }
             }
         }
     }
@@ -141,7 +185,6 @@ class MainViewModel(
     }
 
     fun hideModelSelector() {
-        // Can only hide if not first launch or model is ready
         val state = _uiState.value
         if (!state.isFirstLaunch || state.modelState is ModelState.Ready) {
             _uiState.update { it.copy(showModelSelector = false) }
@@ -166,7 +209,6 @@ class MainViewModel(
         val state = _uiState.value
         when (state.recordingPhase) {
             RecordingPhase.IDLE -> {
-                // Try to load model if not ready
                 if (state.modelState !is ModelState.Ready) {
                     loadModel(state.selectedModel)
                 }
@@ -204,7 +246,11 @@ class MainViewModel(
 
                 if (duration < 0.5f) {
                     _uiState.update {
-                        it.copy(recordingPhase = RecordingPhase.READY, error = "Recording too short (min 0.5s)")
+                        it.copy(
+                            recordingPhase = RecordingPhase.READY,
+                            error = "Recording too short (min 0.5s)",
+                            currentTranscription = ""  // ✅ FIX #12: Clear on error
+                        )
                     }
                     return@launch
                 }
@@ -222,14 +268,24 @@ class MainViewModel(
                         }
                     }
                     is TranscriptionResult.Error -> {
+                        // ✅ FIX #12: Clear transcription on error
                         _uiState.update {
-                            it.copy(recordingPhase = RecordingPhase.READY, error = result.message)
+                            it.copy(
+                                recordingPhase = RecordingPhase.READY,
+                                error = result.message,
+                                currentTranscription = ""
+                            )
                         }
                     }
                 }
             } catch (e: Exception) {
+                // ✅ FIX #12: Clear transcription on error
                 _uiState.update {
-                    it.copy(recordingPhase = RecordingPhase.READY, error = "Error: ${e.message}")
+                    it.copy(
+                        recordingPhase = RecordingPhase.READY,
+                        error = "Error: ${e.message}",
+                        currentTranscription = ""
+                    )
                 }
             }
         }
@@ -282,6 +338,13 @@ class MainViewModel(
 
     override fun onCleared() {
         super.onCleared()
+
+        // ⚡ Cancel all jobs
+        modelStateJob?.cancel()
+        recordingStatusJob?.cancel()
+        historyJob?.cancel()
+        inactivityCheckJob?.cancel()
+
         audioRecorder.release()
         sttEngine.release()
     }

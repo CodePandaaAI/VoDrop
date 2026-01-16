@@ -6,6 +6,7 @@ import com.liftley.vodrop.llm.GeminiCleanupService
 import com.liftley.vodrop.llm.LLMConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -17,20 +18,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionPool
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 private const val LOG_TAG = "AndroidSTTEngine"
 
 /**
  * Android Speech-to-Text engine using native Whisper.cpp.
  *
- * Uses quantized multilingual models for:
- * - Better accuracy with accents
- * - Faster inference
- * - Smaller download sizes
+ * OPTIMIZED for battery life:
+ * - Lazy HTTP client initialization
+ * - Pre-compiled regex patterns
+ * - Model unloading after inactivity
+ * - Reduced connection pool
  */
 class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
@@ -52,15 +56,101 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     @Volatile
     private var isTranscribing = false
 
-    private val httpClient = HttpClient(OkHttp) {
-        expectSuccess = true
+    // ⚡ OPTIMIZED: Track last usage for model unloading
+    @Volatile
+    private var lastUsageTime: Long = 0L
+
+    @Volatile
+    private var llmServiceInitialized = false
+
+    @Volatile
+    private var httpClientInitialized = false
+
+    companion object {
+        // Unload model after 5 minutes of inactivity to save memory
+        private const val MODEL_UNLOAD_TIMEOUT_MS = 5 * 60 * 1000L
+
+        // Minimum text length for LLM cleanup (saves network calls)
+        private const val MIN_LLM_CLEANUP_LENGTH = 50
+
+        // ⚡ OPTIMIZED: Pre-compiled regex patterns (compiled once, used many times)
+        private val WHITESPACE_REGEX = Regex("\\s+")
+
+        private val FILLER_PATTERNS = listOf(
+            Regex("\\bum+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\buh+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bah+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\beh+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bmm+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\bhm+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\ber+\\b", RegexOption.IGNORE_CASE),
+            Regex("\\blike\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\b(you know)\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\b(i mean)\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\bso+\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\bwell\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\bbasically\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\bactually\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+            Regex("\\bright\\b(?=\\s*[,?])", RegexOption.IGNORE_CASE),
+            Regex("\\bokay so\\b", RegexOption.IGNORE_CASE),
+            Regex("\\byeah so\\b", RegexOption.IGNORE_CASE)
+        )
+
+        private val REPEATED_WORD_REGEX = Regex("\\b(\\w+)\\s+\\1\\b", RegexOption.IGNORE_CASE)
+        private val REPEATED_PHRASE_2_REGEX = Regex("\\b(\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)
+        private val REPEATED_PHRASE_3_REGEX = Regex("\\b(\\w+\\s+\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)
+
+        private val CORRECTIONS = listOf(
+            Regex("\\bu\\b", RegexOption.IGNORE_CASE) to "you",
+            Regex("\\bur\\b", RegexOption.IGNORE_CASE) to "your",
+            Regex("\\br\\b", RegexOption.IGNORE_CASE) to "are",
+            Regex("\\bcuz\\b", RegexOption.IGNORE_CASE) to "because",
+            Regex("\\bcause\\b", RegexOption.IGNORE_CASE) to "because",
+            Regex("\\bgonna\\b", RegexOption.IGNORE_CASE) to "going to",
+            Regex("\\bwanna\\b", RegexOption.IGNORE_CASE) to "want to",
+            Regex("\\bgotta\\b", RegexOption.IGNORE_CASE) to "got to",
+            Regex("\\bkinda\\b", RegexOption.IGNORE_CASE) to "kind of",
+            Regex("\\bsorta\\b", RegexOption.IGNORE_CASE) to "sort of",
+            Regex("\\bdunno\\b", RegexOption.IGNORE_CASE) to "don't know",
+            Regex("\\blemme\\b", RegexOption.IGNORE_CASE) to "let me",
+            Regex("\\bgimme\\b", RegexOption.IGNORE_CASE) to "give me"
+        )
+
+        private val MULTIPLE_COMMAS_REGEX = Regex(",\\s*,")
+        private val COMMA_SPACING_REGEX = Regex("\\s*,\\s*")
+        private val COMMA_AT_START_REGEX = Regex("^\\s*,\\s*")
+        private val PERIOD_COMMA_REGEX = Regex("\\.\\s*,")
+        private val SENTENCE_CAPITALIZE_REGEX = Regex("([.!?])\\s+([a-z])")
+        private val STANDALONE_I_REGEX = Regex("\\bi\\b")
+    }
+
+    // ⚡ OPTIMIZED: Lazy HTTP client with reduced connection pool
+    private val httpClient: HttpClient by lazy {
+        httpClientInitialized = true
+        HttpClient(OkHttp) {
+            expectSuccess = true
+            engine {
+                config {
+                    retryOnConnectionFailure(false)
+                    // Reduce idle connections to save battery
+                    connectionPool(ConnectionPool(2, 30, TimeUnit.SECONDS))
+                }
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 120_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 120_000
+            }
+        }
     }
 
     private val modelDirectory: File by lazy {
         File(context.filesDir, "whisper_models").apply { mkdirs() }
     }
 
+    // ⚡ OPTIMIZED: Lazy LLM service (only created when first used)
     private val llmService: GeminiCleanupService by lazy {
+        llmServiceInitialized = true
         GeminiCleanupService(LLMConfig.GEMINI_API_KEY)
     }
 
@@ -70,27 +160,18 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         val sizeBytes: Long
     )
 
-    /**
-     * Get model info - using QUANTIZED MULTILINGUAL models for:
-     * - Better accent support
-     * - Faster inference (2-3x faster than fp16)
-     * - Smaller downloads
-     */
     private fun getModelInfo(model: WhisperModel): ModelInfo = when (model) {
         WhisperModel.FAST -> ModelInfo(
-            // Tiny English - smallest and fastest
             url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
             fileName = "ggml-tiny.en.bin",
             sizeBytes = 75_000_000L
         )
         WhisperModel.BALANCED -> ModelInfo(
-            // Base MULTILINGUAL quantized - better with accents
             url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
             fileName = "ggml-base-q5_1.bin",
             sizeBytes = 57_000_000L
         )
         WhisperModel.QUALITY -> ModelInfo(
-            // Small MULTILINGUAL quantized - best quality for mobile
             url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
             fileName = "ggml-small-q5_1.bin",
             sizeBytes = 181_000_000L
@@ -98,7 +179,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     }
 
     override suspend fun loadModel(model: WhisperModel) {
-        // Don't allow model switch while transcribing
         if (isTranscribing) {
             throw SpeechToTextException("Cannot switch models while transcription is in progress")
         }
@@ -107,7 +187,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         val info = getModelInfo(model)
 
         withContext(Dispatchers.IO) {
-            // Lock to prevent concurrent access
             contextMutex.withLock {
                 try {
                     val modelFile = File(modelDirectory, info.fileName)
@@ -115,11 +194,9 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                     if (!modelFile.exists()) {
                         downloadModel(info, modelFile)
                     } else {
-                        // Verify file size
                         val fileSize = modelFile.length()
                         Log.d(LOG_TAG, "Model file exists, size: $fileSize bytes")
                         if (fileSize < info.sizeBytes * 0.9) {
-                            // File seems corrupted/incomplete, re-download
                             Log.w(LOG_TAG, "Model file seems incomplete, re-downloading...")
                             modelFile.delete()
                             downloadModel(info, modelFile)
@@ -143,7 +220,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                         Log.w(LOG_TAG, "Failed to get system info: ${e.message}")
                     }
 
-                    // Initialize native whisper
                     Log.d(LOG_TAG, "Initializing native context from: ${modelFile.absolutePath}")
                     nativeContext = WhisperJni.init(modelFile.absolutePath)
 
@@ -152,6 +228,7 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                     }
 
                     Log.d(LOG_TAG, "Native context initialized successfully: $nativeContext")
+                    lastUsageTime = System.currentTimeMillis()
                     _modelState.value = ModelState.Ready
 
                 } catch (e: Exception) {
@@ -231,20 +308,18 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         Log.d(LOG_TAG, "Starting transcription of ${audioData.size} bytes")
 
         return withContext(Dispatchers.Default) {
-            // Lock to prevent model switching during transcription
             contextMutex.withLock {
                 isTranscribing = true
                 try {
                     val startTime = System.currentTimeMillis()
+                    lastUsageTime = startTime
 
-                    // Check context again after acquiring lock
                     val ctx = nativeContext
                     if (ctx == 0L) {
                         return@withLock TranscriptionResult.Error("Model was unloaded")
                     }
 
                     // Convert PCM bytes to float samples
-                    // Audio format: 16-bit signed PCM, little-endian, 16kHz, mono
                     val numSamples = audioData.size / 2
                     val samples = FloatArray(numSamples)
 
@@ -258,7 +333,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                     val audioDuration = numSamples / 16000.0f
                     Log.d(LOG_TAG, "Converted to $numSamples float samples (${audioDuration}s audio)")
 
-                    // Validate samples - check if audio isn't silent
                     val maxSample = samples.maxOrNull() ?: 0f
                     val minSample = samples.minOrNull() ?: 0f
                     Log.d(LOG_TAG, "Sample range: [$minSample, $maxSample]")
@@ -271,7 +345,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                         )
                     }
 
-                    // Call native transcription with float array
                     Log.d(LOG_TAG, "Calling native transcribe with context=$ctx")
                     val text = WhisperJni.transcribe(ctx, samples)
 
@@ -284,13 +357,16 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                             durationMs = durationMs
                         )
                     } else {
-                        // First apply rule-based cleanup
+                        // Apply rule-based cleanup (fast, uses pre-compiled regex)
                         var cleanedText = cleanupTranscription(text)
 
-                        // Then apply LLM cleanup if enabled
-                        Log.d(LOG_TAG, "LLM cleanup enabled: ${LLMConfig.isLLMCleanupEnabled}, available: ${llmService.isAvailable()}")
-                        if (LLMConfig.isLLMCleanupEnabled && llmService.isAvailable()) {
-                            Log.d(LOG_TAG, "Attempting LLM cleanup...")
+                        // ⚡ OPTIMIZED: Only use LLM for texts > MIN_LLM_CLEANUP_LENGTH chars
+                        // This saves network calls for short transcriptions
+                        if (LLMConfig.isLLMCleanupEnabled &&
+                            llmService.isAvailable() &&
+                            cleanedText.length > MIN_LLM_CLEANUP_LENGTH) {
+
+                            Log.d(LOG_TAG, "Attempting LLM cleanup for ${cleanedText.length} chars...")
                             try {
                                 val llmResult = llmService.cleanupText(cleanedText)
                                 if (llmResult.isSuccess) {
@@ -301,7 +377,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                                 }
                             } catch (e: Exception) {
                                 Log.w(LOG_TAG, "LLM cleanup error: ${e.message}")
-                                // Continue with rule-based cleanup result
                             }
                         }
 
@@ -321,32 +396,86 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
             }
         }
     }
+
     /**
-     * Simple text formatting - just cleans up without changing meaning.
-     * - Trims whitespace
-     * - Capitalizes first letter of sentences
-     * - Ensures ending punctuation
+     * ⚡ OPTIMIZED: Check if model should be unloaded due to inactivity.
+     * Call this periodically or when app goes to background.
      */
-    private fun formatTranscription(text: String): String {
+    override fun checkAndUnloadIfInactive() {
+        val currentTime = System.currentTimeMillis()
+        val inactive = currentTime - lastUsageTime > MODEL_UNLOAD_TIMEOUT_MS
+
+        if (inactive && nativeContext != 0L && !isTranscribing) {
+            Log.d(LOG_TAG, "Unloading model due to inactivity")
+            try {
+                WhisperJni.release(nativeContext)
+                nativeContext = 0L
+                _modelState.value = ModelState.NotLoaded
+            } catch (e: Exception) {
+                Log.e(LOG_TAG, "Error unloading model", e)
+            }
+        }
+    }
+
+    /**
+     * ⚡ OPTIMIZED: Uses pre-compiled regex patterns for faster cleanup
+     */
+    private fun cleanupTranscription(text: String): String {
         if (text.isBlank()) return text
 
         var result = text.trim()
 
-        // Remove extra spaces
-        result = result.replace(Regex("\\s+"), " ")
+        // Step 1: Normalize whitespace
+        result = result.replace(WHITESPACE_REGEX, " ")
 
-        // Capitalize first letter
-        result = result.replaceFirstChar { it.uppercaseChar() }
+        // Step 2: Remove filler words (using pre-compiled patterns)
+        for (pattern in FILLER_PATTERNS) {
+            result = result.replace(pattern, "")
+        }
 
-        // Capitalize after . ! ?
-        result = result.replace(Regex("([.!?])\\s+([a-z])")) { match ->
+        // Step 3: Remove repeated words
+        result = result.replace(REPEATED_WORD_REGEX) { match ->
+            match.groupValues[1]
+        }
+
+        // Step 4: Remove repeated phrases
+        result = result.replace(REPEATED_PHRASE_2_REGEX) { match ->
+            match.groupValues[1]
+        }
+        result = result.replace(REPEATED_PHRASE_3_REGEX) { match ->
+            match.groupValues[1]
+        }
+
+        // Step 5: Fix common speech-to-text errors
+        for ((pattern, replacement) in CORRECTIONS) {
+            result = result.replace(pattern, replacement)
+        }
+
+        // Step 6: Clean up punctuation
+        result = result.replace(MULTIPLE_COMMAS_REGEX, ",")
+        result = result.replace(COMMA_SPACING_REGEX, ", ")
+        result = result.replace(WHITESPACE_REGEX, " ")
+        result = result.replace(COMMA_AT_START_REGEX, "")
+        result = result.replace(PERIOD_COMMA_REGEX, ".")
+
+        // Step 7: Capitalize properly
+        result = result.trim()
+        if (result.isNotEmpty()) {
+            result = result.replaceFirstChar { it.uppercaseChar() }
+        }
+        result = result.replace(SENTENCE_CAPITALIZE_REGEX) { match ->
             "${match.groupValues[1]} ${match.groupValues[2].uppercase()}"
         }
+        result = result.replace(STANDALONE_I_REGEX, "I")
 
-        // Add period at end if no punctuation
-        if (!result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
+        // Step 8: Add ending punctuation if missing
+        result = result.trim()
+        if (result.isNotEmpty() && !result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
             result = "$result."
         }
+
+        // Final cleanup
+        result = result.replace(WHITESPACE_REGEX, " ").trim()
 
         return result
     }
@@ -364,141 +493,24 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         }
 
         // Close LLM service
-        try {
-            llmService.close()
-        } catch (e: Exception) {
-            Log.w(LOG_TAG, "Error closing LLM service", e)
+        if (llmServiceInitialized) {
+            try {
+                llmService.close()
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Error closing LLM service", e)
+            }
         }
 
-        httpClient.close()
+        // ⚡ Close HTTP client to release connections
+        if (httpClientInitialized) {
+            try {
+                httpClient.close()
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Error closing HTTP client", e)
+            }
+        }
+
         _modelState.value = ModelState.NotLoaded
-    }
-    /**
-     * Smart text cleanup - removes filler words, fixes redundancies, improves grammar.
-     * Keeps the original meaning while making it readable.
-     */
-    private fun cleanupTranscription(text: String): String {
-        if (text.isBlank()) return text
-
-        var result = text.trim()
-
-        // ============================================
-        // STEP 1: Normalize whitespace and basic cleanup
-        // ============================================
-        result = result.replace(Regex("\\s+"), " ")
-
-        // ============================================
-        // STEP 2: Remove filler words (case-insensitive)
-        // ============================================
-        val fillerWords = listOf(
-            "\\bum+\\b",           // um, umm, ummm
-            "\\buh+\\b",           // uh, uhh
-            "\\bah+\\b",           // ah, ahh
-            "\\beh+\\b",           // eh, ehh
-            "\\bmm+\\b",           // mm, mmm
-            "\\bhm+\\b",           // hm, hmm
-            "\\ber+\\b",           // er, err
-            "\\blike\\b(?=\\s*,)", // "like," at start of clause
-            "\\b(you know)\\b(?=\\s*,)", // "you know," filler
-            "\\b(i mean)\\b(?=\\s*,)",   // "i mean," filler
-            "\\bso+\\b(?=\\s*,)",        // "so," at start
-            "\\bwell\\b(?=\\s*,)",       // "well," filler
-            "\\bbasically\\b(?=\\s*,)",  // "basically," filler
-            "\\bactually\\b(?=\\s*,)",   // "actually," filler
-            "\\bright\\b(?=\\s*[,?])",   // "right," or "right?"
-            "\\bokay so\\b",             // "okay so"
-            "\\byeah so\\b",             // "yeah so"
-        )
-
-        for (filler in fillerWords) {
-            result = result.replace(Regex(filler, RegexOption.IGNORE_CASE), "")
-        }
-
-        // ============================================
-        // STEP 3: Remove repeated words
-        // "I I think" -> "I think"
-        // "the the" -> "the"
-        // ============================================
-        result = result.replace(Regex("\\b(\\w+)\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
-            match.groupValues[1]
-        }
-
-        // ============================================
-        // STEP 4: Remove repeated short phrases (2-4 words)
-        // "I hope you, hope you" -> "I hope you"
-        // ============================================
-        result = result.replace(Regex("\\b(\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
-            match.groupValues[1]
-        }
-        result = result.replace(Regex("\\b(\\w+\\s+\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
-            match.groupValues[1]
-        }
-
-        // ============================================
-        // STEP 5: Fix common speech-to-text errors
-        // ============================================
-        val corrections = mapOf(
-            "\\bu\\b" to "you",           // "u" -> "you"
-            "\\bur\\b" to "your",         // "ur" -> "your"
-            "\\br\\b" to "are",           // "r" -> "are"
-            "\\bcuz\\b" to "because",     // "cuz" -> "because"
-            "\\bcause\\b" to "because",   // "cause" -> "because"
-            "\\bgonna\\b" to "going to",  // "gonna" -> "going to"
-            "\\bwanna\\b" to "want to",   // "wanna" -> "want to"
-            "\\bgotta\\b" to "got to",    // "gotta" -> "got to"
-            "\\bkinda\\b" to "kind of",   // "kinda" -> "kind of"
-            "\\bsorta\\b" to "sort of",   // "sorta" -> "sort of"
-            "\\bdunno\\b" to "don't know", // "dunno" -> "don't know"
-            "\\blemme\\b" to "let me",    // "lemme" -> "let me"
-            "\\bgimme\\b" to "give me",   // "gimme" -> "give me"
-        )
-
-        for ((pattern, replacement) in corrections) {
-            result = result.replace(Regex(pattern, RegexOption.IGNORE_CASE), replacement)
-        }
-
-        // ============================================
-        // STEP 6: Clean up punctuation
-        // ============================================
-        // Remove multiple commas/spaces
-        result = result.replace(Regex(",\\s*,"), ",")
-        result = result.replace(Regex("\\s*,\\s*"), ", ")
-        result = result.replace(Regex("\\s+"), " ")
-
-        // Remove comma at start of sentence
-        result = result.replace(Regex("^\\s*,\\s*"), "")
-        result = result.replace(Regex("\\.\\s*,"), ".")
-
-        // ============================================
-        // STEP 7: Capitalize properly
-        // ============================================
-        result = result.trim()
-
-        // Capitalize first letter
-        if (result.isNotEmpty()) {
-            result = result.replaceFirstChar { it.uppercaseChar() }
-        }
-
-        // Capitalize after . ! ?
-        result = result.replace(Regex("([.!?])\\s+([a-z])")) { match ->
-            "${match.groupValues[1]} ${match.groupValues[2].uppercase()}"
-        }
-
-        // Capitalize "I" when standalone
-        result = result.replace(Regex("\\bi\\b"), "I")
-
-        // ============================================
-        // STEP 8: Add ending punctuation if missing
-        // ============================================
-        result = result.trim()
-        if (result.isNotEmpty() && !result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
-            result = "$result."
-        }
-
-        // Final cleanup
-        result = result.replace(Regex("\\s+"), " ").trim()
-
-        return result
     }
 }
 

@@ -52,6 +52,11 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
             try {
                 val modelFile = File(modelDirectory, model.fileName)
 
+                // ✅ FIX #10: Clean up any leftover temp files
+                modelDirectory.listFiles()?.filter { it.name.endsWith(".tmp") }?.forEach {
+                    it.delete()
+                }
+
                 if (!modelFile.exists()) {
                     downloadModel(model, modelFile)
                 }
@@ -120,7 +125,8 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
     }
 
     override fun isModelAvailable(model: WhisperModel): Boolean {
-        return File(modelDirectory, model.fileName).exists()
+        val file = File(modelDirectory, model.fileName)
+        return file.exists() && file.length() > model.sizeBytes * 0.9
     }
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
@@ -177,6 +183,12 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
             samples[i] = shortBuffer.get() / 32768.0f
         }
         return samples
+    }
+
+    // ✅ FIX #1: Add override for checkAndUnloadIfInactive
+    override fun checkAndUnloadIfInactive() {
+        // Desktop has plenty of RAM, no need to unload
+        // This is intentionally empty
     }
 
     override fun release() {
