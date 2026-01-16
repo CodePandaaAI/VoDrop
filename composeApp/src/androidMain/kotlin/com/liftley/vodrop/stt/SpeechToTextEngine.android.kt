@@ -279,7 +279,7 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                         )
                     } else {
                         TranscriptionResult.Success(
-                            text = formatTranscription(text),  // <-- Apply formatting here
+                            text = cleanupTranscription(text),  // <-- Use new function
                             durationMs = durationMs
                         )
                     }
@@ -336,6 +336,133 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         }
         httpClient.close()
         _modelState.value = ModelState.NotLoaded
+    }
+    /**
+     * Smart text cleanup - removes filler words, fixes redundancies, improves grammar.
+     * Keeps the original meaning while making it readable.
+     */
+    private fun cleanupTranscription(text: String): String {
+        if (text.isBlank()) return text
+
+        var result = text.trim()
+
+        // ============================================
+        // STEP 1: Normalize whitespace and basic cleanup
+        // ============================================
+        result = result.replace(Regex("\\s+"), " ")
+
+        // ============================================
+        // STEP 2: Remove filler words (case-insensitive)
+        // ============================================
+        val fillerWords = listOf(
+            "\\bum+\\b",           // um, umm, ummm
+            "\\buh+\\b",           // uh, uhh
+            "\\bah+\\b",           // ah, ahh
+            "\\beh+\\b",           // eh, ehh
+            "\\bmm+\\b",           // mm, mmm
+            "\\bhm+\\b",           // hm, hmm
+            "\\ber+\\b",           // er, err
+            "\\blike\\b(?=\\s*,)", // "like," at start of clause
+            "\\b(you know)\\b(?=\\s*,)", // "you know," filler
+            "\\b(i mean)\\b(?=\\s*,)",   // "i mean," filler
+            "\\bso+\\b(?=\\s*,)",        // "so," at start
+            "\\bwell\\b(?=\\s*,)",       // "well," filler
+            "\\bbasically\\b(?=\\s*,)",  // "basically," filler
+            "\\bactually\\b(?=\\s*,)",   // "actually," filler
+            "\\bright\\b(?=\\s*[,?])",   // "right," or "right?"
+            "\\bokay so\\b",             // "okay so"
+            "\\byeah so\\b",             // "yeah so"
+        )
+
+        for (filler in fillerWords) {
+            result = result.replace(Regex(filler, RegexOption.IGNORE_CASE), "")
+        }
+
+        // ============================================
+        // STEP 3: Remove repeated words
+        // "I I think" -> "I think"
+        // "the the" -> "the"
+        // ============================================
+        result = result.replace(Regex("\\b(\\w+)\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
+            match.groupValues[1]
+        }
+
+        // ============================================
+        // STEP 4: Remove repeated short phrases (2-4 words)
+        // "I hope you, hope you" -> "I hope you"
+        // ============================================
+        result = result.replace(Regex("\\b(\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
+            match.groupValues[1]
+        }
+        result = result.replace(Regex("\\b(\\w+\\s+\\w+\\s+\\w+),?\\s+\\1\\b", RegexOption.IGNORE_CASE)) { match ->
+            match.groupValues[1]
+        }
+
+        // ============================================
+        // STEP 5: Fix common speech-to-text errors
+        // ============================================
+        val corrections = mapOf(
+            "\\bu\\b" to "you",           // "u" -> "you"
+            "\\bur\\b" to "your",         // "ur" -> "your"
+            "\\br\\b" to "are",           // "r" -> "are"
+            "\\bcuz\\b" to "because",     // "cuz" -> "because"
+            "\\bcause\\b" to "because",   // "cause" -> "because"
+            "\\bgonna\\b" to "going to",  // "gonna" -> "going to"
+            "\\bwanna\\b" to "want to",   // "wanna" -> "want to"
+            "\\bgotta\\b" to "got to",    // "gotta" -> "got to"
+            "\\bkinda\\b" to "kind of",   // "kinda" -> "kind of"
+            "\\bsorta\\b" to "sort of",   // "sorta" -> "sort of"
+            "\\bdunno\\b" to "don't know", // "dunno" -> "don't know"
+            "\\blemme\\b" to "let me",    // "lemme" -> "let me"
+            "\\bgimme\\b" to "give me",   // "gimme" -> "give me"
+        )
+
+        for ((pattern, replacement) in corrections) {
+            result = result.replace(Regex(pattern, RegexOption.IGNORE_CASE), replacement)
+        }
+
+        // ============================================
+        // STEP 6: Clean up punctuation
+        // ============================================
+        // Remove multiple commas/spaces
+        result = result.replace(Regex(",\\s*,"), ",")
+        result = result.replace(Regex("\\s*,\\s*"), ", ")
+        result = result.replace(Regex("\\s+"), " ")
+
+        // Remove comma at start of sentence
+        result = result.replace(Regex("^\\s*,\\s*"), "")
+        result = result.replace(Regex("\\.\\s*,"), ".")
+
+        // ============================================
+        // STEP 7: Capitalize properly
+        // ============================================
+        result = result.trim()
+
+        // Capitalize first letter
+        if (result.isNotEmpty()) {
+            result = result.replaceFirstChar { it.uppercaseChar() }
+        }
+
+        // Capitalize after . ! ?
+        result = result.replace(Regex("([.!?])\\s+([a-z])")) { match ->
+            "${match.groupValues[1]} ${match.groupValues[2].uppercase()}"
+        }
+
+        // Capitalize "I" when standalone
+        result = result.replace(Regex("\\bi\\b"), "I")
+
+        // ============================================
+        // STEP 8: Add ending punctuation if missing
+        // ============================================
+        result = result.trim()
+        if (result.isNotEmpty() && !result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
+            result = "$result."
+        }
+
+        // Final cleanup
+        result = result.replace(Regex("\\s+"), " ").trim()
+
+        return result
     }
 }
 
