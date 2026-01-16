@@ -1,28 +1,14 @@
 package com.liftley.vodrop.ui.components.dialogs
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.OfflinePin
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,13 +19,13 @@ import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
 /**
- * Bottom sheet for selecting transcription mode.
- * All modes are unlocked for testing.
+ * Bottom sheet for selecting transcription mode with clear explanations
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranscriptionModeSheet(
     currentMode: TranscriptionMode,
+    isPro: Boolean = true,
     onModeSelected: (TranscriptionMode) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -57,7 +43,6 @@ fun TranscriptionModeSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Header
             Text(
                 text = "Transcription Mode",
                 style = MaterialTheme.typography.headlineSmall,
@@ -67,7 +52,7 @@ fun TranscriptionModeSheet(
             )
 
             Text(
-                text = "Choose how your voice is converted to text",
+                text = "Choose how your voice is processed",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -76,51 +61,85 @@ fun TranscriptionModeSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Mode Options
-            ModeOption(
-                icon = Icons.Rounded.OfflinePin,
-                title = "Offline Only",
-                description = "Fast & private. Works without internet.",
-                benefits = listOf("🔒 Private - never leaves device", "⚡ Fast processing", "📶 No internet needed"),
-                isSelected = currentMode == TranscriptionMode.OFFLINE_ONLY,
-                onClick = { onModeSelected(TranscriptionMode.OFFLINE_ONLY) }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            ModeOption(
-                icon = Icons.Rounded.AutoAwesome,
-                title = "Offline + AI Polish",
-                description = "Local transcription with smart AI cleanup.",
-                benefits = listOf("📱 Transcribes on device", "🤖 AI fixes grammar & fillers", "✨ Professional results"),
-                isSelected = currentMode == TranscriptionMode.OFFLINE_WITH_AI,
-                onClick = { onModeSelected(TranscriptionMode.OFFLINE_WITH_AI) }
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            ModeOption(
+            // Standard Mode
+            ModeOptionCard(
                 icon = Icons.Rounded.Cloud,
-                title = "Cloud + AI",
-                description = "Best accuracy. Uses cloud processing.",
-                benefits = listOf("☁️ Most accurate transcription", "🌍 Handles accents better", "🚀 Best for important notes"),
-                isSelected = currentMode == TranscriptionMode.CLOUD_WITH_AI,
-                onClick = { onModeSelected(TranscriptionMode.CLOUD_WITH_AI) }
+                title = "Standard",
+                subtitle = "Groq Whisper Large v3",
+                benefits = listOf(
+                    "☁️ Cloud transcription (95%+ accuracy)",
+                    "⚡ Fast processing",
+                    "🌐 Requires internet"
+                ),
+                limitations = listOf(
+                    "❌ No grammar cleanup",
+                    "❌ No filler word removal",
+                    "❌ No personality style applied"
+                ),
+                isSelected = currentMode == TranscriptionMode.STANDARD,
+                onClick = { onModeSelected(TranscriptionMode.STANDARD) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // AI Polish Mode
+            ModeOptionCard(
+                icon = Icons.Rounded.AutoAwesome,
+                title = "AI Polish ✨",
+                subtitle = "Groq Whisper + Gemini 3 Flash",
+                benefits = listOf(
+                    "☁️ Cloud transcription (95%+ accuracy)",
+                    "✨ Removes filler words (um, uh, like)",
+                    "📝 Fixes grammar & punctuation",
+                    "🎯 Applies your personality style",
+                    "📋 Smart formatting (lists, paragraphs)"
+                ),
+                limitations = emptyList(),
+                isSelected = currentMode == TranscriptionMode.WITH_AI_POLISH,
+                onClick = { onModeSelected(TranscriptionMode.WITH_AI_POLISH) },
+                isPremium = true
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Info note
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        Icons.Rounded.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "AI Polish uses your chosen personality style (Formal, Informal, or Casual) to clean up text. You can change this in Settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ModeOption(
+private fun ModeOptionCard(
     icon: ImageVector,
     title: String,
-    description: String,
+    subtitle: String,
     benefits: List<String>,
+    limitations: List<String>,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isPremium: Boolean = false
 ) {
     val borderColor = if (isSelected)
         MaterialTheme.colorScheme.primary
@@ -168,36 +187,66 @@ private fun ModeOption(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Content
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isPremium) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiary,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "PRO",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
 
+                // Model name subtitle
                 Text(
-                    text = description,
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(top = 2.dp)
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Benefits
                 benefits.forEach { benefit ->
                     Text(
                         text = benefit,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                         modifier = Modifier.padding(vertical = 1.dp)
                     )
                 }
+
+                // Limitations (for Standard mode)
+                if (limitations.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    limitations.forEach { limitation ->
+                        Text(
+                            text = limitation,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                    }
+                }
             }
 
-            // Checkmark
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Rounded.Check,

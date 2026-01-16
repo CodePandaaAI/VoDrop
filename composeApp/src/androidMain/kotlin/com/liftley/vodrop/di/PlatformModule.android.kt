@@ -5,6 +5,8 @@ import com.liftley.vodrop.auth.SubscriptionManager
 import com.liftley.vodrop.data.llm.GeminiCleanupService
 import com.liftley.vodrop.data.llm.LLMConfig
 import com.liftley.vodrop.data.llm.TextCleanupService
+import com.liftley.vodrop.data.preferences.AndroidPreferencesManager
+import com.liftley.vodrop.data.preferences.PreferencesManager
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import org.koin.android.ext.koin.androidContext
@@ -15,9 +17,12 @@ val platformModule = module {
     single { FirebaseAuthManager() }
     single { SubscriptionManager(androidContext()) }
 
+    // Preferences
+    single<PreferencesManager> { AndroidPreferencesManager() }
+
     // Text cleanup service (Gemini)
     single<TextCleanupService> { GeminiCleanupService(LLMConfig.GEMINI_API_KEY) }
 
-    // HttpClient for Groq API
+    // HttpClient
     single { HttpClient(OkHttp) }
 }

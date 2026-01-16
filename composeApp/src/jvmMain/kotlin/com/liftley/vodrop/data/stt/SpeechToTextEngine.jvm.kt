@@ -1,10 +1,5 @@
-package com.liftley.vodrop.data.audio.stt
+package com.liftley.vodrop.data.stt
 
-import com.liftley.vodrop.data.stt.ModelState
-import com.liftley.vodrop.data.stt.SpeechToTextEngine
-import com.liftley.vodrop.data.stt.SpeechToTextException
-import com.liftley.vodrop.data.stt.TranscriptionResult
-import com.liftley.vodrop.data.stt.WhisperModel
 import io.github.givimad.whisperjni.WhisperContext
 import io.github.givimad.whisperjni.WhisperFullParams
 import io.github.givimad.whisperjni.WhisperJNI
@@ -25,15 +20,22 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
+ * Model configuration for Desktop (offline)
+ */
+private object DesktopModelConfig {
+    const val MODEL_NAME = "ggml-base-q5_1.bin"
+    const val MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin"
+    const val MODEL_SIZE = 57_000_000L
+}
+
+/**
  * Desktop (JVM) Speech-to-Text engine using WhisperJNI
+ * Keeps offline capability for Desktop where it works great
  */
 class JvmSpeechToTextEngine : SpeechToTextEngine {
 
-    private val _modelState = MutableStateFlow<ModelState>(ModelState.NotLoaded)
-    override val modelState: StateFlow<ModelState> = _modelState.asStateFlow()
-
-    private var _currentModel: WhisperModel = WhisperModel.DEFAULT
-    override val currentModel: WhisperModel get() = _currentModel
+    private val _state = MutableStateFlow<TranscriptionState>(TranscriptionState.NotReady)
+    override val state: StateFlow<TranscriptionState> = _state.asStateFlow()
 
     private var whisperContext: WhisperContext? = null
     private val whisperJNI = WhisperJNI()
@@ -45,27 +47,28 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
         File(userHome, ".vodrop/models").apply { mkdirs() }
     }
 
+    private val modelFile: File
+        get() = File(modelDirectory, DesktopModelConfig.MODEL_NAME)
+
     init {
         WhisperJNI.loadLibrary()
     }
 
-    override suspend fun loadModel(model: WhisperModel) {
-        _currentModel = model
-
+    override suspend fun initialize() {
         withContext(Dispatchers.IO) {
             try {
-                val modelFile = File(modelDirectory, model.fileName)
-
-                // ✅ FIX #10: Clean up any leftover temp files
+                // Clean up temp files
                 modelDirectory.listFiles()?.filter { it.name.endsWith(".tmp") }?.forEach {
                     it.delete()
                 }
 
-                if (!modelFile.exists()) {
-                    downloadModel(model, modelFile)
+                // Download model if needed
+                if (!modelFile.exists() || modelFile.length() < DesktopModelConfig.MODEL_SIZE * 0.9) {
+                    downloadModel()
                 }
 
-                _modelState.value = ModelState.Loading
+                // Load model
+                _state.value = TranscriptionState.Initializing("Loading model...")
 
                 whisperContext?.close()
                 whisperContext = whisperJNI.init(modelFile.toPath())
@@ -74,29 +77,30 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
                     throw SpeechToTextException("Failed to initialize Whisper context")
                 }
 
-                _modelState.value = ModelState.Ready
+                _state.value = TranscriptionState.Ready
+                println("✅ Desktop Whisper model loaded")
 
             } catch (e: Exception) {
-                val error = "Failed to load model: ${e.message}"
-                _modelState.value = ModelState.Error(error)
+                val error = "Failed to initialize: ${e.message}"
+                _state.value = TranscriptionState.Error(error)
                 throw SpeechToTextException(error, e)
             }
         }
     }
 
-    private suspend fun downloadModel(model: WhisperModel, targetFile: File) {
-        _modelState.value = ModelState.Downloading(0f)
+    private suspend fun downloadModel() {
+        _state.value = TranscriptionState.Downloading(0f)
 
         try {
-            targetFile.parentFile?.mkdirs()
-            val tempFile = File(targetFile.parent, "${targetFile.name}.tmp")
+            modelFile.parentFile?.mkdirs()
+            val tempFile = File(modelFile.parent, "${modelFile.name}.tmp")
 
-            httpClient.prepareGet(model.downloadUrl).execute { response ->
+            httpClient.prepareGet(DesktopModelConfig.MODEL_URL).execute { response ->
                 if (!response.status.isSuccess()) {
                     throw SpeechToTextException("Download failed: HTTP ${response.status.value}")
                 }
 
-                val contentLength = response.contentLength() ?: model.sizeBytes
+                val contentLength = response.contentLength() ?: DesktopModelConfig.MODEL_SIZE
                 val channel: ByteReadChannel = response.bodyAsChannel()
 
                 var downloaded = 0L
@@ -109,14 +113,14 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
                             output.write(buffer, 0, bytesRead)
                             downloaded += bytesRead
                             val progress = (downloaded.toFloat() / contentLength).coerceIn(0f, 1f)
-                            _modelState.value = ModelState.Downloading(progress)
+                            _state.value = TranscriptionState.Downloading(progress)
                         }
                     }
                     output.flush()
                 }
             }
 
-            if (!tempFile.renameTo(targetFile)) {
+            if (!tempFile.renameTo(modelFile)) {
                 tempFile.delete()
                 throw SpeechToTextException("Failed to save model file")
             }
@@ -128,19 +132,17 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
         }
     }
 
-    override fun isModelAvailable(model: WhisperModel): Boolean {
-        val file = File(modelDirectory, model.fileName)
-        return file.exists() && file.length() > model.sizeBytes * 0.9
-    }
+    override fun isReady(): Boolean = _state.value is TranscriptionState.Ready
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
         val context = whisperContext
-        if (context == null || _modelState.value !is ModelState.Ready) {
+        if (context == null || !isReady()) {
             return TranscriptionResult.Error("Model not loaded")
         }
 
         return withContext(Dispatchers.Default) {
             try {
+                _state.value = TranscriptionState.Transcribing
                 val startTime = System.currentTimeMillis()
 
                 val samples = convertBytesToFloatSamples(audioData)
@@ -156,6 +158,7 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
 
                 val result = whisperJNI.full(context, params, samples, samples.size)
                 if (result != 0) {
+                    _state.value = TranscriptionState.Ready
                     return@withContext TranscriptionResult.Error("Transcription failed with code: $result")
                 }
 
@@ -166,12 +169,17 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
                 }
 
                 val durationMs = System.currentTimeMillis() - startTime
+                _state.value = TranscriptionState.Ready
+
+                // Apply basic cleanup
+                val cleanedText = RuleBasedTextCleanup.cleanup(text.toString().trim())
 
                 TranscriptionResult.Success(
-                    text = text.toString().trim(),
+                    text = cleanedText,
                     durationMs = durationMs
                 )
             } catch (e: Exception) {
+                _state.value = TranscriptionState.Ready
                 TranscriptionResult.Error("Transcription error: ${e.message}")
             }
         }
@@ -189,17 +197,11 @@ class JvmSpeechToTextEngine : SpeechToTextEngine {
         return samples
     }
 
-    // ✅ FIX #1: Add override for checkAndUnloadIfInactive
-    override fun checkAndUnloadIfInactive() {
-        // Desktop has plenty of RAM, no need to unload
-        // This is intentionally empty
-    }
-
     override fun release() {
         whisperContext?.close()
         whisperContext = null
         httpClient.close()
-        _modelState.value = ModelState.NotLoaded
+        _state.value = TranscriptionState.NotReady
     }
 }
 

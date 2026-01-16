@@ -1,32 +1,14 @@
 package com.liftley.vodrop.ui.main
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.animation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,8 +25,8 @@ import com.liftley.vodrop.ui.components.recording.RecordingCard
 import com.liftley.vodrop.ui.components.dialogs.UpgradeDialog
 import com.liftley.vodrop.ui.components.dialogs.DeleteDialog
 import com.liftley.vodrop.ui.components.dialogs.EditDialog
-import com.liftley.vodrop.ui.components.dialogs.ModelSelectorDialog
 import com.liftley.vodrop.ui.components.dialogs.TranscriptionModeSheet
+import com.liftley.vodrop.ui.settings.SettingsScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,12 +37,66 @@ fun MainScreen(
     onPurchaseMonthly: () -> Unit = {},
     onPurchaseYearly: () -> Unit = {},
     onRestorePurchases: () -> Unit = {},
-    monthlyPrice: String = "₹129/month",
-    yearlyPrice: String = "₹999/year"
+    monthlyPrice: String = "₹99/month",
+    yearlyPrice: String = "₹799/year"
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val clipboardManager = LocalClipboardManager.current
 
+    // Show Settings Screen or Main Content
+    AnimatedContent(
+        targetState = uiState.showSettings,
+        transitionSpec = {
+            if (targetState) {
+                slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+            } else {
+                slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+            }
+        },
+        label = "settings_transition"
+    ) { showSettings ->
+        if (showSettings) {
+            SettingsScreen(
+                currentMode = uiState.transcriptionMode,
+                currentStyle = uiState.cleanupStyle,
+                userName = uiState.userName,
+                isPro = uiState.isPro,
+                onModeChange = viewModel::selectTranscriptionMode,
+                onStyleChange = viewModel::setCleanupStyle,
+                onNameChange = viewModel::setUserName,
+                onNavigateBack = viewModel::hideSettings
+            )
+        } else {
+            MainContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                clipboardManager = clipboardManager,
+                onLoginClick = onLoginClick,
+                onSignOut = onSignOut,
+                onPurchaseMonthly = onPurchaseMonthly,
+                onPurchaseYearly = onPurchaseYearly,
+                onRestorePurchases = onRestorePurchases,
+                monthlyPrice = monthlyPrice,
+                yearlyPrice = yearlyPrice
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainContent(
+    uiState: MainUiState,
+    viewModel: MainViewModel,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager,
+    onLoginClick: () -> Unit,
+    onSignOut: () -> Unit,
+    onPurchaseMonthly: () -> Unit,
+    onPurchaseYearly: () -> Unit,
+    onRestorePurchases: () -> Unit,
+    monthlyPrice: String,
+    yearlyPrice: String
+) {
     // Dialogs
     DialogHost(
         uiState = uiState,
@@ -77,11 +113,10 @@ fun MainScreen(
     Scaffold(
         topBar = {
             TopBar(
-                modelName = "${uiState.selectedModel.emoji} ${uiState.selectedModel.displayName}",
                 isLoggedIn = uiState.isLoggedIn,
                 isPro = uiState.isPro,
                 transcriptionMode = uiState.transcriptionMode,
-                onSettingsClick = viewModel::showModelSelector,
+                remainingFree = uiState.remainingFreeTranscriptions,
                 onProfileClick = {
                     if (uiState.isLoggedIn) {
                         viewModel.showProfileDialog()
@@ -89,7 +124,8 @@ fun MainScreen(
                         onLoginClick()
                     }
                 },
-                onModeClick = viewModel::showTranscriptionModeSheet
+                onModeClick = viewModel::showTranscriptionModeSheet,
+                onSettingsClick = viewModel::showSettings
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -105,8 +141,10 @@ fun MainScreen(
             item {
                 RecordingCard(
                     phase = uiState.recordingPhase,
-                    modelState = uiState.modelState,
+                    transcriptionState = uiState.transcriptionState,
                     currentTranscription = uiState.currentTranscription,
+                    progressMessage = uiState.progressMessage,
+                    transcriptionMode = uiState.transcriptionMode,
                     error = uiState.error,
                     onRecordClick = viewModel::onRecordClick,
                     onClearError = viewModel::clearError,
@@ -147,13 +185,13 @@ fun MainScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
-    modelName: String,
     isLoggedIn: Boolean,
     isPro: Boolean,
     transcriptionMode: TranscriptionMode,
-    onSettingsClick: () -> Unit,
+    remainingFree: Int,
     onProfileClick: () -> Unit,
-    onModeClick: () -> Unit
+    onModeClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     CenterAlignedTopAppBar(
         title = {
@@ -168,42 +206,24 @@ private fun TopBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Model badge
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = modelName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-
                     // Mode toggle (tappable)
                     Surface(
                         onClick = onModeClick,
                         color = when (transcriptionMode) {
-                            TranscriptionMode.OFFLINE_ONLY -> MaterialTheme.colorScheme.surfaceVariant
-                            TranscriptionMode.OFFLINE_WITH_AI -> MaterialTheme.colorScheme.secondaryContainer
-                            else -> MaterialTheme.colorScheme.tertiaryContainer
+                            TranscriptionMode.STANDARD -> MaterialTheme.colorScheme.primaryContainer
+                            TranscriptionMode.WITH_AI_POLISH -> MaterialTheme.colorScheme.tertiaryContainer
                         },
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = when (transcriptionMode) {
-                                TranscriptionMode.OFFLINE_ONLY -> "📱 Offline"
-                                TranscriptionMode.OFFLINE_WITH_AI -> "📱+🤖"
-                                else -> "☁️ Cloud"
-                            },
+                            text = "${transcriptionMode.emoji} ${transcriptionMode.displayName}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
 
-                    // PRO badge
+                    // PRO badge or remaining count
                     if (isPro) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiary,
@@ -214,6 +234,18 @@ private fun TopBar(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onTertiary,
                                 fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "$remainingFree left",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -238,7 +270,9 @@ private fun TopBar(
             IconButton(onClick = onSettingsClick) {
                 Icon(
                     Icons.Rounded.Settings,
-                    contentDescription = "Settings"
+                    contentDescription = "Settings",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -260,16 +294,6 @@ private fun DialogHost(
     monthlyPrice: String,
     yearlyPrice: String
 ) {
-    // Model Selector Dialog
-    if (uiState.showModelSelector) {
-        ModelSelectorDialog(
-            isFirstLaunch = uiState.isFirstLaunch,
-            currentModel = uiState.selectedModel,
-            onSelect = viewModel::selectModel,
-            onDismiss = viewModel::hideModelSelector
-        )
-    }
-
     // Delete Confirmation Dialog
     if (uiState.deleteConfirmationId != null) {
         DeleteDialog(
@@ -353,10 +377,12 @@ private fun DialogHost(
             }
         )
     }
+
     // Transcription Mode Sheet
     if (uiState.showTranscriptionModeSheet) {
         TranscriptionModeSheet(
             currentMode = uiState.transcriptionMode,
+            isPro = uiState.isPro,
             onModeSelected = viewModel::selectTranscriptionMode,
             onDismiss = viewModel::hideTranscriptionModeSheet
         )

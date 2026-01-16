@@ -12,18 +12,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.data.stt.ModelState
+import com.liftley.vodrop.data.stt.TranscriptionState
 import com.liftley.vodrop.ui.main.RecordingPhase
+import com.liftley.vodrop.ui.main.TranscriptionMode
 
 /**
- * Main recording section with status, button, and transcription result
- * Material 3 Expressive: Bigger, rounder, more spacious
+ * Main recording section with robust status display
  */
 @Composable
 fun RecordingCard(
     phase: RecordingPhase,
-    modelState: ModelState,
+    transcriptionState: TranscriptionState,
     currentTranscription: String,
+    progressMessage: String = "",
+    transcriptionMode: TranscriptionMode = TranscriptionMode.STANDARD,
     error: String?,
     onRecordClick: () -> Unit,
     onClearError: () -> Unit,
@@ -32,49 +34,60 @@ fun RecordingCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(36.dp),  // More expressive rounding
+        shape = RoundedCornerShape(36.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(40.dp),  // More generous padding
-            horizontalAlignment = Alignment.CenterHorizontally  // ALWAYS centered
+                .padding(40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Status Text - Always centered
-            StatusText(phase = phase, modelState = modelState)
+            // Status Text with mode indicator
+            StatusSection(
+                phase = phase,
+                transcriptionState = transcriptionState,
+                progressMessage = progressMessage,
+                transcriptionMode = transcriptionMode
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Download Progress - Centered below status
-            if (modelState is ModelState.Downloading) {
-                DownloadProgress(progress = modelState.progress)
+            // Download Progress (Desktop only)
+            if (transcriptionState is TranscriptionState.Downloading) {
+                DownloadProgress(progress = transcriptionState.progress)
                 Spacer(modifier = Modifier.height(32.dp))
             } else {
                 Spacer(modifier = Modifier.height(40.dp))
             }
 
-            // Big Record Button - ALWAYS centered
+            // Big Record Button
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 RecordButton(
                     phase = phase,
-                    modelState = modelState,
+                    transcriptionState = transcriptionState,
                     onClick = onRecordClick,
-                    size = 140.dp  // Bigger for expressive feel
+                    size = 140.dp
                 )
             }
 
             // Current Transcription Result
-            if (currentTranscription.isNotEmpty()) {
+            if (currentTranscription.isNotEmpty() && !currentTranscription.startsWith("☁️") && !currentTranscription.startsWith("✨")) {
                 Spacer(modifier = Modifier.height(32.dp))
                 TranscriptionResultCard(
                     text = currentTranscription,
                     onCopy = onCopyTranscription
                 )
+            }
+
+            // Progress indicator during transcription
+            if (phase == RecordingPhase.PROCESSING && progressMessage.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                ProcessingIndicator(message = progressMessage)
             }
 
             // Error Message
@@ -87,12 +100,17 @@ fun RecordingCard(
 }
 
 @Composable
-private fun StatusText(phase: RecordingPhase, modelState: ModelState) {
-    val (title, subtitle) = getStatusContent(phase, modelState)
+private fun StatusSection(
+    phase: RecordingPhase,
+    transcriptionState: TranscriptionState,
+    progressMessage: String,
+    transcriptionMode: TranscriptionMode
+) {
+    val (title, subtitle) = getStatusContent(phase, transcriptionState, progressMessage)
 
     Text(
         text = title,
-        style = MaterialTheme.typography.headlineMedium,  // Bigger for expressive
+        style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center
@@ -100,20 +118,51 @@ private fun StatusText(phase: RecordingPhase, modelState: ModelState) {
     Spacer(modifier = Modifier.height(6.dp))
     Text(
         text = subtitle,
-        style = MaterialTheme.typography.bodyLarge,  // Slightly bigger
+        style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center
     )
+
+    // Mode indicator
+    if (phase == RecordingPhase.READY || phase == RecordingPhase.LISTENING) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Surface(
+            color = when (transcriptionMode) {
+                TranscriptionMode.STANDARD -> MaterialTheme.colorScheme.surfaceVariant
+                TranscriptionMode.WITH_AI_POLISH -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+            },
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = when (transcriptionMode) {
+                    TranscriptionMode.STANDARD -> "🎤 Standard • Groq Whisper"
+                    TranscriptionMode.WITH_AI_POLISH -> "✨ AI Polish • Groq + Gemini"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+    }
 }
 
-private fun getStatusContent(phase: RecordingPhase, modelState: ModelState): Pair<String, String> {
+private fun getStatusContent(
+    phase: RecordingPhase,
+    state: TranscriptionState,
+    progressMessage: String
+): Pair<String, String> {
     return when {
-        modelState is ModelState.Downloading -> "Downloading Model" to "One-time download, please wait..."
-        modelState is ModelState.Loading -> "Loading Model" to "Preparing speech recognition..."
+        state is TranscriptionState.Downloading -> "Downloading Model" to "One-time download, please wait..."
+        state is TranscriptionState.Initializing -> "Connecting..." to state.message
         phase == RecordingPhase.LISTENING -> "Listening..." to "Speak now, tap to stop"
-        phase == RecordingPhase.PROCESSING -> "Processing..." to "Transcribing your voice"
+        phase == RecordingPhase.PROCESSING -> {
+            when {
+                progressMessage.contains("Transcribing") -> "Transcribing..." to "Sending audio to cloud"
+                progressMessage.contains("Polishing") -> "Polishing..." to "Applying AI cleanup"
+                else -> "Processing..." to progressMessage.ifEmpty { "Please wait..." }
+            }
+        }
         phase == RecordingPhase.READY -> "Ready to Record" to "Tap the microphone to start"
-        else -> "Getting Ready..." to "Please wait"
+        else -> "Getting Ready..." to "Connecting to cloud..."
     }
 }
 
@@ -125,12 +174,11 @@ private fun DownloadProgress(progress: Float) {
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // More expressive progress bar
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(10.dp)  // Thicker
+                .height(10.dp)
                 .clip(RoundedCornerShape(5.dp)),
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
             color = MaterialTheme.colorScheme.primary
@@ -146,10 +194,35 @@ private fun DownloadProgress(progress: Float) {
 }
 
 @Composable
+private fun ProcessingIndicator(message: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
 private fun TranscriptionResultCard(text: String, onCopy: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),  // More rounded
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
         )
@@ -165,11 +238,11 @@ private fun TranscriptionResultCard(text: String, onCopy: () -> Unit) {
             FilledTonalButton(
                 onClick = onCopy,
                 modifier = Modifier.align(Alignment.End),
-                shape = RoundedCornerShape(16.dp),  // Rounder button
+                shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
             ) {
                 Icon(
-                    Icons.Rounded.ContentCopy,  // Rounded icons
+                    Icons.Rounded.ContentCopy,
                     null,
                     modifier = Modifier.size(18.dp)
                 )
@@ -184,7 +257,7 @@ private fun TranscriptionResultCard(text: String, onCopy: () -> Unit) {
 private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),  // More rounded
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {
         Row(

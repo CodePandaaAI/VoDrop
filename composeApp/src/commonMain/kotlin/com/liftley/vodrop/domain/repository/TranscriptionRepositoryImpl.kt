@@ -1,10 +1,9 @@
-package com.liftley.vodrop.data.repository
+package com.liftley.vodrop.domain.repository
 
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.model.Transcription
-import com.liftley.vodrop.domain.repository.TranscriptionRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +14,7 @@ import kotlinx.coroutines.withContext
  * SQLDelight implementation of TranscriptionRepository
  */
 class TranscriptionRepositoryImpl(
-    private val database: VoDropDatabase
+    database: VoDropDatabase
 ) : TranscriptionRepository {
 
     private val queries = database.transcriptionQueries

@@ -1,91 +1,103 @@
 package com.liftley.vodrop.ui.main
 
-import com.liftley.vodrop.data.stt.ModelState
-import com.liftley.vodrop.data.stt.WhisperModel
+import com.liftley.vodrop.data.llm.CleanupStyle
+import com.liftley.vodrop.data.stt.TranscriptionState
 import com.liftley.vodrop.domain.model.Transcription
 
 /**
- * Phases of the recording flow
+ * Recording flow phases - Clear, distinct states
  */
 enum class RecordingPhase {
-    IDLE,      // No model loaded
-    READY,     // Model loaded, ready to record
-    LISTENING, // Currently recording
-    PROCESSING // Processing transcription
+    IDLE,           // Engine not ready
+    READY,          // Ready to record
+    LISTENING,      // Recording audio
+    PROCESSING      // Transcribing
 }
 
 /**
- * Transcription modes:
- * - OFFLINE_ONLY: Local Whisper.cpp only, no AI cleanup
- * - OFFLINE_WITH_AI: Local Whisper.cpp + Gemini cleanup
- * - CLOUD_WITH_AI: Groq cloud Whisper + Gemini cleanup
+ * Transcription modes with detailed descriptions
  */
 enum class TranscriptionMode(
     val displayName: String,
-    val shortName: String,
     val emoji: String,
-    val description: String
+    val description: String,
+    val requiresPro: Boolean
 ) {
-    OFFLINE_ONLY(
-        displayName = "Offline Only",
-        shortName = "Offline",
-        emoji = "📱",
-        description = "Fast, private, works without internet"
+    STANDARD(
+        displayName = "Standard",
+        emoji = "🎤",
+        description = "Fast cloud transcription without AI cleanup",
+        requiresPro = false
     ),
-    OFFLINE_WITH_AI(
-        displayName = "Offline + AI",
-        shortName = "📱+🤖",
-        emoji = "📱",
-        description = "Local transcription with AI polish"
-    ),
-    CLOUD_WITH_AI(
-        displayName = "Cloud + AI",
-        shortName = "Cloud",
-        emoji = "☁️",
-        description = "Best accuracy, requires internet"
+    WITH_AI_POLISH(
+        displayName = "AI Polish",
+        emoji = "✨",
+        description = "Cloud transcription + Gemini 3 Flash cleanup",
+        requiresPro = false  // TESTING: Set to false
     );
 
     companion object {
-        val DEFAULT = OFFLINE_WITH_AI
-
-        fun fromOrdinal(ordinal: Int): TranscriptionMode {
-            return entries.getOrElse(ordinal) { DEFAULT }
-        }
+        val DEFAULT = STANDARD
     }
 }
 
 /**
- * Main UI state for the application
+ * Main UI state - Single source of truth
  */
 data class MainUiState(
     // Recording state
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
-    val modelState: ModelState = ModelState.NotLoaded,
-    val selectedModel: WhisperModel = WhisperModel.DEFAULT,
+    val transcriptionState: TranscriptionState = TranscriptionState.NotReady,
     val currentTranscription: String = "",
     val error: String? = null,
+
+    // Progress message for showing detailed status
+    val progressMessage: String = "",
 
     // History
     val history: List<Transcription> = emptyList(),
 
     // Dialogs
-    val showModelSelector: Boolean = false,
-    val isFirstLaunch: Boolean = true,
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
     val showTranscriptionModeSheet: Boolean = false,
+    val showSettings: Boolean = false,
 
-    // Pro features
-    val isPro: Boolean = false,
-    val isLoggedIn: Boolean = false,
-    val userName: String? = null,
-    val userEmail: String? = null,
+    // Pro features - TESTING: All forced to true/enabled
+    val isPro: Boolean = true,
+    val isLoggedIn: Boolean = true,
+    val userName: String = "Test User",
+    val userEmail: String? = "test@vodrop.com",
     val userPhotoUrl: String? = null,
     val showProfileDialog: Boolean = false,
     val showUpgradeDialog: Boolean = false,
     val showLoginPrompt: Boolean = false,
     val improvingTranscriptionId: Long? = null,
 
-    // Transcription mode
-    val transcriptionMode: TranscriptionMode = TranscriptionMode.OFFLINE_ONLY
-)
+    // Transcription settings
+    val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,
+    val cleanupStyle: CleanupStyle = CleanupStyle.DEFAULT,
+
+    // Usage tracking
+    val monthlyTranscriptions: Int = 0,
+    val maxFreeTranscriptions: Int = 999  // TESTING: Unlimited
+) {
+    val canTranscribe: Boolean
+        get() = true  // TESTING: Always allow
+
+    val remainingFreeTranscriptions: Int
+        get() = 999  // TESTING: Always show plenty
+
+    // Helper for UI to determine what's happening
+    val statusMessage: String
+        get() = when {
+            transcriptionState is TranscriptionState.Downloading ->
+                "Downloading model... ${(transcriptionState.progress * 100).toInt()}%"
+            transcriptionState is TranscriptionState.Initializing ->
+                transcriptionState.message
+            recordingPhase == RecordingPhase.LISTENING -> "Listening..."
+            recordingPhase == RecordingPhase.PROCESSING -> progressMessage.ifEmpty { "Processing..." }
+            recordingPhase == RecordingPhase.READY -> "Ready"
+            else -> "Initializing..."
+        }
+}

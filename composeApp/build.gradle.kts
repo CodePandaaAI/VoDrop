@@ -105,28 +105,12 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // Only build for ARM64 (most modern phones)
-        // You can add "armeabi-v7a" for older 32-bit phones
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
-    }
-
-    // Tell Gradle to use CMake for native code
-    externalNativeBuild {
-        cmake {
-            path = file("src/androidMain/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
+        // No more NDK - we're cloud-only now! 🎉
     }
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-        // Required for native libraries
-        jniLibs {
-            useLegacyPackaging = true
         }
     }
 
@@ -138,8 +122,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Optional: Add signing config for release
-            // signingConfig = signingConfigs.getByName("release")
         }
     }
 

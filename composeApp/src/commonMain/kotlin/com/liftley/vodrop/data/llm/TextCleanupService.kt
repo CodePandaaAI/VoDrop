@@ -6,14 +6,12 @@ package com.liftley.vodrop.data.llm
  */
 interface TextCleanupService {
     /**
-     * Clean up transcribed text using LLM.
-     * @param rawText The raw transcription from Whisper
-     * @return Cleaned text, or null if cleanup failed
+     * Clean up text using the specified style
      */
-    suspend fun cleanupText(rawText: String): Result<String>
+    suspend fun cleanupText(rawText: String, style: CleanupStyle = CleanupStyle.DEFAULT): Result<String>
 
     /**
-     * Check if the service is available (has API key, network, etc.)
+     * Check if the service is available
      */
     fun isAvailable(): Boolean
 }

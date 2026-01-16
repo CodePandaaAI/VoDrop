@@ -11,38 +11,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.ConnectionPool
-import java.util.concurrent.TimeUnit
 
-private const val LOG_TAG = "GeminiCleanup"
+private const val TAG = "GeminiCleanup"
 
 /**
- * Gemini-based text cleanup service.
- * Uses Gemini 2.0 Flash for fast, high-quality text cleanup.
- *
- * ⚡ OPTIMIZED: Reduced connection pool, proper timeouts
+ * Gemini-based text cleanup service with style support
  */
 class GeminiCleanupService(
     private val apiKey: String
 ) : TextCleanupService {
 
-    // ⚡ OPTIMIZED: Lazy initialization with reduced connection pool
-    private val httpClient: HttpClient by lazy {
-        HttpClient(OkHttp) {
-            expectSuccess = false
-            engine {
-                config {
-                    retryOnConnectionFailure(false)
-                    // Reduce idle connections to save battery
-                    connectionPool(ConnectionPool(1, 15, TimeUnit.SECONDS))
-                }
-            }
-            install(HttpTimeout) {
-                requestTimeoutMillis = 60_000    // 60 seconds
-                connectTimeoutMillis = 15_000    // 15 seconds
-                socketTimeoutMillis = 60_000     // 60 seconds
-            }
+    private val httpClient = HttpClient(OkHttp) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 60_000
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 60_000
         }
+        expectSuccess = false
     }
 
     private val json = Json {
@@ -51,60 +36,175 @@ class GeminiCleanupService(
     }
 
     private val baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
-    private val model = "gemini-3-flash-preview"  // Updated to stable model
+    private val model = "gemini-3-flash-preview"
 
-    companion object {
-        private val CLEANUP_PROMPT = """
+    // ═══════════════════════════════════════════════════════════════
+    // BASE PROMPT - Core cleanup rules (all styles inherit from this)
+    // ═══════════════════════════════════════════════════════════════
+
+    private val BASE_CLEANUP_RULES = """
 You are an expert transcription editor. Your job is to clean up speech-to-text output.
 
 INPUT: Raw transcription that may contain recognition errors, filler words, and formatting issues.
 
-YOUR TASKS:
-1. PRESERVE THE ORIGINAL MESSAGE - Do not add, remove, or change the meaning
-2. FIX GRAMMAR - Correct sentence structure, subject-verb agreement, tense consistency
-3. FIX MISHEARD WORDS - Identify words that were incorrectly recognized by speech-to-text:
-   - "Nebsoh" or "eebso" → "NEBOSH" (if context suggests a certification/safety/well Known words)
+CORE EDITING RULES (ALWAYS APPLY):
+
+1. PRESERVE THE ORIGINAL MESSAGE
+   - Do not add, remove, or change the meaning
+   - Keep the speaker's intent intact
+   - If unsure, keep the original
+
+2. FIX GRAMMAR
+   - Correct sentence structure
+   - Fix subject-verb agreement
+   - Maintain tense consistency
+
+3. FIX MISHEARD WORDS
+   - Identify words incorrectly recognized by speech-to-text
+   - "Nebsoh" or "eebso" → "NEBOSH" (if context suggests certification/safety)
    - Look for words that sound similar but don't make sense in context
    - Common confusions: proper nouns, technical terms, acronyms
-4. REMOVE FILLER WORDS - um, uh, ah, like, you know, basically, so, well, right, okay so
-5. REMOVE STUTTERS - "I I think" → "I think", repeated phrases
-6. FORMAT LISTS - If someone says "first... second... third..." or "point 1, point 2":
-   - Format as bullet points or numbered list on new lines
-   - Example: "first do this second do that" → 
-     "1. Do this
-      2. Do that"
-7. CAPITALIZE PROPERLY:
-   - Proper nouns (names, places, companies)
+
+4. REMOVE FILLER WORDS
+   - Remove: um, uh, ah, like, you know, basically, so, well, right, okay so
+   - Keep if intentional emphasis: "I was like, wow!"
+
+5. REMOVE STUTTERS
+   - "I I think" → "I think"
+   - Remove repeated phrases and false starts
+
+6. CAPITALIZE PROPERLY
+   - Proper nouns (names, places, companies, brands)
    - Acronyms (NEBOSH, NASA, API, etc.)
    - Start of sentences
-8. PUNCTUATION - Add proper commas, periods, question marks
-9. KEEP IT NATURAL - Don't make it sound robotic or overly formal. Match the speaker's tone.
+
+7. PUNCTUATION
+   - Add proper commas, periods, question marks
+   - Use appropriate punctuation for tone
+
+FORMATTING RULES (IMPORTANT):
+
+8. FORMAT LISTS & POINTS
+   If someone mentions multiple items, steps, or points:
+   - "first do this second do that third do this" → 
+     "1. Do this
+      2. Do that
+      3. Do this"
+   - Use numbered lists for sequences/steps
+   - Use bullet points (• or -) for non-sequential items
+
+9. ADD PARAGRAPH BREAKS
+   - Add line breaks between different topics or ideas
+   - If the speaker changes subject, start a new paragraph
+   - Don't create one massive wall of text
+
+10. STRUCTURE LONG CONTENT
+    For longer transcriptions:
+    - Break into logical sections
+    - Add spacing between distinct thoughts
+    - If there's a clear topic change, add a blank line
+
+OUTPUT RULES:
 
 IMPORTANT:
 - Only fix what's clearly wrong
 - If a word might be intentional, keep it
-- Do NOT rewrite or paraphrase
-- Return ONLY the cleaned text, no explanations
-
-Transcription:
+- Do NOT rewrite or paraphrase the content
+- Return ONLY the cleaned text, no explanations or commentary
 """
-    }
 
-    override suspend fun cleanupText(rawText: String): Result<String> {
-        if (rawText.isBlank()) {
-            return Result.success(rawText)
+    // ═══════════════════════════════════════════════════════════════
+    // STYLE-SPECIFIC ADDITIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    private val FORMAL_STYLE_ADDITION = """
+
+STYLE: FORMAL & PROFESSIONAL:
+
+Apply these ADDITIONAL adjustments for a professional tone:
+
+- Use complete sentences (avoid fragments)
+- Replace casual phrases with professional alternatives:
+  - "gonna" → "going to"
+  - "wanna" → "want to"
+  - "gotta" → "have to" / "need to"
+  - "kinda" → "somewhat" / "rather"
+  - "yeah" → "yes"
+  - "nope" → "no"
+  - "stuff" → "items" / "materials" / "matters"
+  - "things" → be more specific if possible
+  - "got" → "received" / "obtained" / "have"
+  - "a lot" → "many" / "numerous" / "significant"
+
+- Use formal contractions sparingly (prefer "do not" over "don't" in formal contexts)
+- Ensure professional vocabulary where appropriate
+- Keep sentences clear and well-structured
+- This is for business emails, presentations, and professional documents
+
+BUT STILL:
+- Keep the original meaning exactly the same
+- Don't make it sound robotic or overly stiff
+- Maintain natural flow
+"""
+
+    private val INFORMAL_STYLE_ADDITION = """
+
+STYLE: INFORMAL & NATURAL
+
+Keep the speaker's natural voice while cleaning up:
+
+- Contractions are fine (don't, won't, can't, it's)
+- Keep casual phrases if they sound natural
+- Match the speaker's original energy and enthusiasm
+- Light slang is acceptable if it fits the context
+- Focus on clarity more than formality
+- This is for personal notes, messages, and casual communication
+
+GOAL: Clean and readable, but sounds like YOU wrote it, not a robot.
+"""
+
+    private val CASUAL_STYLE_ADDITION = """
+
+STYLE: CASUAL & FRIENDLY
+
+Keep it relaxed and approachable:
+
+- Use contractions freely
+- Keep friendly expressions and light slang
+- Exclamation marks are welcome for enthusiasm!
+- Casual transitions are fine ("So anyway...", "Oh, and...")
+- Short sentences and fragments are okay for a punchy feel
+- Emojis context is fine (if speaker seems excited, keep the energy)
+- This is for quick notes, chat messages, and brainstorming
+
+GOAL: Like texting a friend, but cleaned up and readable.
+"""
+
+    // ═══════════════════════════════════════════════════════════════
+    // BUILD FINAL PROMPT
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun buildPrompt(style: CleanupStyle): String {
+        val styleAddition = when (style) {
+            CleanupStyle.FORMAL -> FORMAL_STYLE_ADDITION
+            CleanupStyle.INFORMAL -> INFORMAL_STYLE_ADDITION
+            CleanupStyle.CASUAL -> CASUAL_STYLE_ADDITION
         }
 
-        if (rawText.length < 10) {
+        return "$BASE_CLEANUP_RULES$styleAddition\n\nTranscription:\n"
+    }
+
+    override suspend fun cleanupText(rawText: String, style: CleanupStyle): Result<String> {
+        if (rawText.isBlank() || rawText.length < 10) {
             return Result.success(rawText)
         }
 
         return withContext(Dispatchers.IO) {
             try {
-                val prompt = CLEANUP_PROMPT + "\"$rawText\""
+                val prompt = buildPrompt(style) + "\"$rawText\""
                 val requestBody = buildRequestBody(prompt)
 
-                Log.d(LOG_TAG, "Sending cleanup request for ${rawText.length} chars")
+                Log.d(TAG, "Cleanup request: ${rawText.length} chars, style: ${style.name}")
 
                 val response = httpClient.post("$baseUrl/$model:generateContent") {
                     parameter("key", apiKey)
@@ -113,23 +213,22 @@ Transcription:
                 }
 
                 val responseText = response.bodyAsText()
-                Log.d(LOG_TAG, "Response status: ${response.status}")
 
                 if (response.status.isSuccess()) {
                     val cleanedText = parseResponse(responseText)
                     if (cleanedText != null) {
-                        Log.d(LOG_TAG, "Cleanup successful: ${cleanedText.take(50)}...")
+                        Log.d(TAG, "Success: ${cleanedText.take(50)}...")
                         Result.success(cleanedText)
                     } else {
-                        Log.w(LOG_TAG, "Failed to parse response, using original")
+                        Log.w(TAG, "Empty response, returning original")
                         Result.success(rawText)
                     }
                 } else {
-                    Log.e(LOG_TAG, "API error: $responseText")
+                    Log.e(TAG, "API error: ${response.status} - $responseText")
                     Result.failure(Exception("API error: ${response.status}"))
                 }
             } catch (e: Exception) {
-                Log.e(LOG_TAG, "Cleanup failed", e)
+                Log.e(TAG, "Cleanup failed", e)
                 Result.failure(e)
             }
         }
@@ -152,7 +251,7 @@ Transcription:
   }],
   "generationConfig": {
     "temperature": 0.1,
-    "maxOutputTokens": 2048,
+    "maxOutputTokens": 4096,
     "topP": 0.8,
     "topK": 10
   }
@@ -165,40 +264,26 @@ Transcription:
             val response = json.decodeFromString<GeminiResponse>(responseText)
             response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim()
         } catch (e: Exception) {
-            Log.e(LOG_TAG, "Parse error", e)
+            Log.e(TAG, "Parse error", e)
             null
         }
     }
 
-    override fun isAvailable(): Boolean {
-        return apiKey.isNotBlank()
-    }
+    override fun isAvailable(): Boolean = apiKey.isNotBlank()
 
     fun close() {
-        try {
-            httpClient.close()
-        } catch (e: Exception) {
-            Log.w(LOG_TAG, "Error closing HTTP client", e)
-        }
+        httpClient.close()
     }
 }
 
 @Serializable
-private data class GeminiResponse(
-    val candidates: List<Candidate>? = null
-)
+private data class GeminiResponse(val candidates: List<Candidate>? = null)
 
 @Serializable
-private data class Candidate(
-    val content: Content? = null
-)
+private data class Candidate(val content: Content? = null)
 
 @Serializable
-private data class Content(
-    val parts: List<Part>? = null
-)
+private data class Content(val parts: List<Part>? = null)
 
 @Serializable
-private data class Part(
-    val text: String? = null
-)
+private data class Part(val text: String? = null)

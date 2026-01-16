@@ -1,11 +1,9 @@
 package com.liftley.vodrop.di
 
 import com.liftley.vodrop.data.audio.createAudioRecorder
-import com.liftley.vodrop.data.repository.TranscriptionRepositoryImpl
+import com.liftley.vodrop.domain.repository.TranscriptionRepositoryImpl
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.repository.TranscriptionRepository
-import com.liftley.vodrop.data.stt.GroqConfig
-import com.liftley.vodrop.data.stt.GroqWhisperService
 import com.liftley.vodrop.data.stt.createSpeechToTextEngine
 import com.liftley.vodrop.domain.usecase.ManageHistoryUseCase
 import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
@@ -17,15 +15,14 @@ val appModule = module {
     // Database
     single { get<DatabaseDriverFactory>().createDriver() }
     single { VoDropDatabase(get()) }
-    // In appModule
     single<TranscriptionRepository> { TranscriptionRepositoryImpl(get()) }
 
     // Services
     single { createAudioRecorder() }
     single { createSpeechToTextEngine() }
-    single { GroqWhisperService(GroqConfig.API_KEY, get()) }
 
     // Use Cases
+    // TranscribeAudioUseCase now needs: sttEngine, textCleanupService, preferencesManager
     single { TranscribeAudioUseCase(get(), get(), get()) }
     single { ManageHistoryUseCase(get()) }
 

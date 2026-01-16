@@ -1,7 +1,8 @@
 package com.liftley.vodrop.domain.usecase
 
+import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.llm.TextCleanupService
-import com.liftley.vodrop.data.stt.GroqWhisperService
+import com.liftley.vodrop.data.preferences.PreferencesManager
 import com.liftley.vodrop.data.stt.SpeechToTextEngine
 import com.liftley.vodrop.data.stt.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
@@ -10,36 +11,23 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 
 /**
- * Use case for transcribing audio with optional AI cleanup.
- * Orchestrates STT engine selection and LLM processing based on mode.
+ * Use case for transcribing audio with style-aware AI cleanup.
  */
 class TranscribeAudioUseCase(
     private val sttEngine: SpeechToTextEngine,
-    private val groqService: GroqWhisperService,
-    private val textCleanupService: TextCleanupService
+    private val textCleanupService: TextCleanupService,
+    private val preferencesManager: PreferencesManager
 ) {
 
-    /**
-     * Result of a transcription operation
-     */
     sealed interface Result {
         data class Success(
             val text: String,
-            val usedCloud: Boolean,
             val usedAI: Boolean
         ) : Result
 
         data class Error(val message: String) : Result
     }
 
-    /**
-     * Transcribe audio data based on the selected mode
-     *
-     * @param audioData Raw PCM audio bytes (16kHz, mono, 16-bit)
-     * @param mode Transcription mode (offline, offline+AI, cloud+AI)
-     * @param onProgress Callback for progress updates
-     * @return Transcription result with metadata
-     */
     suspend operator fun invoke(
         audioData: ByteArray,
         mode: TranscriptionMode,
@@ -47,53 +35,34 @@ class TranscribeAudioUseCase(
     ): Result {
         return withContext(Dispatchers.Default) {
             try {
-                // Step 1: Choose STT engine
-                val sttResult = when (mode) {
-                    TranscriptionMode.CLOUD_WITH_AI -> {
-                        onProgress("☁️ Transcribing with cloud...")
-                        println("☁️ Using Groq Whisper (cloud)")
-                        withContext(Dispatchers.IO) { groqService.transcribe(audioData) }
-                    }
-                    else -> {
-                        onProgress("📱 Transcribing locally...")
-                        println("📱 Using Whisper.cpp (offline)")
-                        sttEngine.transcribe(audioData)
-                    }
-                }
+                onProgress("☁️ Transcribing...")
+                println("☁️ Sending to cloud STT...")
 
-                // Step 2: Process STT result
+                val sttResult = sttEngine.transcribe(audioData)
+
                 when (sttResult) {
                     is TranscriptionResult.Success -> {
                         var text = sttResult.text.trim()
-                        println("✅ Transcription result: $text")
+                        println("✅ Transcription: ${text.take(50)}...")
 
                         var usedAI = false
 
-                        // Step 3: Apply AI cleanup if mode requires it
-                        if (mode != TranscriptionMode.OFFLINE_ONLY &&
+                        if (mode == TranscriptionMode.WITH_AI_POLISH &&
                             text.isNotBlank() &&
-                            text.length > 30
+                            text.length > 20
                         ) {
-                            onProgress("$text\n\n⏳ Improving with AI...")
-                            println("🤖 Applying Gemini LLM cleanup...")
+                            onProgress("$text\n\n✨ Polishing with AI...")
+                            println("🤖 Applying AI polish...")
 
-                            val improvedText = applyAICleanup(text)
-                            if (improvedText != null) {
-                                println("✅ Gemini improvement applied")
-                                text = improvedText
+                            val polishedText = applyAIPolish(text)
+                            if (polishedText != null) {
+                                println("✅ AI polish applied")
+                                text = polishedText
                                 usedAI = true
-                            } else {
-                                println("⚠️ Gemini improvement failed, using original")
                             }
-                        } else {
-                            println("⏭️ Skipping AI cleanup (mode=$mode, length=${text.length})")
                         }
 
-                        Result.Success(
-                            text = text,
-                            usedCloud = mode == TranscriptionMode.CLOUD_WITH_AI,
-                            usedAI = usedAI
-                        )
+                        Result.Success(text = text, usedAI = usedAI)
                     }
                     is TranscriptionResult.Error -> {
                         println("❌ Transcription error: ${sttResult.message}")
@@ -107,27 +76,34 @@ class TranscribeAudioUseCase(
         }
     }
 
-    /**
-     * Apply AI text cleanup using the injected service
-     */
-    private suspend fun applyAICleanup(text: String): String? {
+    suspend fun improveText(text: String): String? {
+        return applyAIPolish(text)
+    }
+
+    private suspend fun applyAIPolish(text: String): String? {
         return withContext(Dispatchers.IO) {
             try {
                 if (!textCleanupService.isAvailable()) {
-                    println("⚠️ Text cleanup service not available")
+                    println("⚠️ AI polish service not available")
                     return@withContext null
                 }
 
-                val result = textCleanupService.cleanupText(text)
+                // Get user's preferred style
+                val prefs = preferencesManager.getPreferences()
+                val style = prefs.cleanupStyle
+
+                println("📝 Using style: ${style.name}")
+
+                val result = textCleanupService.cleanupText(text, style)
 
                 if (result.isSuccess) {
                     result.getOrNull()
                 } else {
-                    println("⚠️ Cleanup failed: ${result.exceptionOrNull()?.message}")
+                    println("⚠️ AI polish failed: ${result.exceptionOrNull()?.message}")
                     null
                 }
             } catch (e: Exception) {
-                println("❌ AI cleanup error: ${e.message}")
+                println("❌ AI polish error: ${e.message}")
                 null
             }
         }
