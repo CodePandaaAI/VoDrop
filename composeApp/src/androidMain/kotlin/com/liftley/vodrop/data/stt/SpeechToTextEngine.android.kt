@@ -2,7 +2,6 @@ package com.liftley.vodrop.data.stt
 
 import android.content.Context
 import android.util.Log
-import com.liftley.vodrop.data.audio.stt.WhisperJni
 import com.liftley.vodrop.data.llm.GeminiCleanupService
 import com.liftley.vodrop.data.llm.LLMConfig
 import io.ktor.client.*
@@ -52,14 +51,14 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
             expectSuccess = true
             engine {
                 config {
-                    retryOnConnectionFailure(false)
+                    retryOnConnectionFailure(true)  // Enable retry
                     connectionPool(ConnectionPool(2, 30, TimeUnit.SECONDS))
                 }
             }
             install(HttpTimeout) {
-                requestTimeoutMillis = 120_000
-                connectTimeoutMillis = 30_000
-                socketTimeoutMillis = 120_000
+                requestTimeoutMillis = 600_000    // 10 minutes (was 2 minutes!)
+                connectTimeoutMillis = 60_000     // 1 minute
+                socketTimeoutMillis = 600_000     // 10 minutes
             }
         }
     }

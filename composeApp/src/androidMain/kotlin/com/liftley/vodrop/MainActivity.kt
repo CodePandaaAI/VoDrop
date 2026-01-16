@@ -1,11 +1,16 @@
 package com.liftley.vodrop
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.liftley.vodrop.auth.FirebaseAuthManager
 import com.liftley.vodrop.auth.SubscriptionManager
@@ -25,8 +30,28 @@ class MainActivity : ComponentActivity() {
     private lateinit var authManager: FirebaseAuthManager
     private lateinit var subscriptionManager: SubscriptionManager
 
+    // Permission state
+    private val hasMicPermission = mutableStateOf(false)
+
+    // Permission launcher
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasMicPermission.value = isGranted
+        if (!isGranted) {
+            Toast.makeText(
+                this,
+                "Microphone permission is required for voice recording",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Check microphone permission
+        checkAndRequestMicrophonePermission()
 
         // Initialize Koin
         try {
@@ -59,7 +84,6 @@ class MainActivity : ComponentActivity() {
                 // Observe auth state
                 val currentUser by authManager.currentUser.collectAsState()
                 val isPro by subscriptionManager.isPro.collectAsState()
-                val isAuthLoading by authManager.isLoading.collectAsState()
 
                 // Update ViewModel with auth state
                 viewModel.setUserInfo(
@@ -73,7 +97,6 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     viewModel = viewModel,
                     onLoginClick = {
-                        // Use the new Credential Manager sign-in
                         lifecycleScope.launch {
                             val result = authManager.signInWithGoogle(this@MainActivity)
                             if (result.isSuccess) {
@@ -97,16 +120,16 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onSignOut = {
-    lifecycleScope.launch {
-        authManager.signOut(this@MainActivity)  // Add Activity parameter
-        subscriptionManager.logout()
-        Toast.makeText(
-            this@MainActivity,
-            "Signed out",
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-},
+                        lifecycleScope.launch {
+                            authManager.signOut(this@MainActivity)
+                            subscriptionManager.logout()
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Signed out",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
                     onPurchaseMonthly = {
                         lifecycleScope.launch {
                             subscriptionManager.purchaseMonthly(this@MainActivity)
@@ -130,6 +153,30 @@ class MainActivity : ComponentActivity() {
                     monthlyPrice = subscriptionManager.getMonthlyPrice(),
                     yearlyPrice = subscriptionManager.getYearlyPrice()
                 )
+            }
+        }
+    }
+
+    private fun checkAndRequestMicrophonePermission() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                hasMicPermission.value = true
+            }
+            shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> {
+                // Show explanation then request
+                Toast.makeText(
+                    this,
+                    "VoDrop needs microphone access to record your voice",
+                    Toast.LENGTH_LONG
+                ).show()
+                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            else -> {
+                // Directly request
+                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
     }

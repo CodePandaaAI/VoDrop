@@ -1,4 +1,4 @@
-package com.liftley.vodrop.data.audio.stt
+package com.liftley.vodrop.data.stt
 
 import android.util.Log
 

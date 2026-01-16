@@ -11,7 +11,7 @@
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_liftley_vodrop_stt_WhisperJni_init(
+Java_com_liftley_vodrop_data_stt_WhisperJni_init(
         JNIEnv* env,
         jobject thiz,
         jstring modelPath
@@ -36,7 +36,7 @@ Java_com_liftley_vodrop_stt_WhisperJni_init(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
+Java_com_liftley_vodrop_data_stt_WhisperJni_transcribe(
         JNIEnv* env,
         jobject thiz,
         jlong contextPtr,
@@ -47,7 +47,7 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
         return env->NewStringUTF("");
     }
 
-    struct whisper_context* ctx = reinterpret_cast<whisper_context*>(contextPtr);
+    auto ctx = reinterpret_cast<whisper_context*>(contextPtr);
 
     jfloat* samples = env->GetFloatArrayElements(audioData, nullptr);
     jsize numSamples = env->GetArrayLength(audioData);
@@ -65,14 +65,8 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
     float audioDuration = (float)numSamples / 16000.0f;
     LOGI("Audio duration: %.2f seconds", audioDuration);
 
-    // ============================================
-    // SPEED-OPTIMIZED SETTINGS
-    // ============================================
-
-    // GREEDY is faster than BEAM_SEARCH
     struct whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
 
-    // Basic settings
     params.print_realtime = false;
     params.print_progress = false;
     params.print_timestamps = false;
@@ -81,26 +75,12 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
     params.n_threads = 4;
     params.offset_ms = 0;
     params.single_segment = false;
-
-    // ============================================
-    // ACCURACY + SPEED OPTIMIZATIONS
-    // ============================================
-
-    // Set language explicitly (faster than auto-detect)
     params.language = "en";
-
-    // Keep context for better accuracy within same recording
     params.no_context = false;
-
-    // Greedy sampling - just pick best, no beam search overhead
     params.greedy.best_of = 1;
-
-    // Low temperature = more accurate, less creative
     params.temperature = 0.0f;
-
-    // Suppress blank/silence tokens for cleaner output
     params.suppress_blank = true;
-    params.suppress_nst = true;  // Suppress non-speech tokens
+    params.suppress_nst = true;
 
     LOGI("Using GREEDY mode with %d threads, language=en", params.n_threads);
 
@@ -120,7 +100,6 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
         return env->NewStringUTF("");
     }
 
-    // Get results
     std::string fullText;
     int numSegments = whisper_full_n_segments(ctx);
     LOGI("Got %d segments", numSegments);
@@ -138,20 +117,20 @@ Java_com_liftley_vodrop_stt_WhisperJni_transcribe(
 }
 
 JNIEXPORT void JNICALL
-Java_com_liftley_vodrop_stt_WhisperJni_release(
+Java_com_liftley_vodrop_data_stt_WhisperJni_release(
         JNIEnv* env,
         jobject thiz,
         jlong contextPtr
 ) {
     if (contextPtr != 0L) {
-        struct whisper_context* ctx = reinterpret_cast<whisper_context*>(contextPtr);
+        auto ctx = reinterpret_cast<whisper_context*>(contextPtr);
         whisper_free(ctx);
         LOGI("Whisper context released");
     }
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_liftley_vodrop_stt_WhisperJni_getSystemInfo(
+Java_com_liftley_vodrop_data_stt_WhisperJni_getSystemInfo(
         JNIEnv* env,
         jobject thiz
 ) {

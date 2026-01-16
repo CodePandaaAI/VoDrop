@@ -102,7 +102,20 @@ class MainViewModel(
             try {
                 sttEngine.loadModel(model)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to load model: ${e.message}", recordingPhase = RecordingPhase.IDLE) }
+                val errorMessage = when {
+                    e.message?.contains("timeout", ignoreCase = true) == true ->
+                        "Download timed out. Please check your internet connection and try again."
+                    e.message?.contains("network", ignoreCase = true) == true ->
+                        "Network error. Please check your connection."
+                    else -> "Failed to load model: ${e.message}"
+                }
+                _uiState.update {
+                    it.copy(
+                        error = errorMessage,
+                        recordingPhase = RecordingPhase.IDLE,
+                        modelState = ModelState.NotLoaded
+                    )
+                }
             }
         }
     }
@@ -280,6 +293,26 @@ class MainViewModel(
                     sttEngine.checkAndUnloadIfInactive()
                 }
             }
+        }
+    }
+
+    // Add these functions to MainViewModel:
+
+    fun showTranscriptionModeSheet() {
+        _uiState.update { it.copy(showTranscriptionModeSheet = true) }
+    }
+
+    fun hideTranscriptionModeSheet() {
+        _uiState.update { it.copy(showTranscriptionModeSheet = false) }
+    }
+
+    fun selectTranscriptionMode(mode: TranscriptionMode) {
+        println("🔄 Selected mode: ${mode.displayName}")
+        _uiState.update {
+            it.copy(
+                transcriptionMode = mode,
+                showTranscriptionModeSheet = false
+            )
         }
     }
 

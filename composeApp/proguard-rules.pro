@@ -2,7 +2,7 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
--keep class com.liftley.vodrop.data.audio.stt.WhisperJni { *; }
+-keep class com.liftley.vodrop.data.stt.WhisperJni { *; }
 
 # === ESSENTIAL: Kotlinx Serialization (for Gemini API) ===
 -keepattributes *Annotation*

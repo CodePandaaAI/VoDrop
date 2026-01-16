@@ -44,6 +44,7 @@ import com.liftley.vodrop.ui.components.dialogs.UpgradeDialog
 import com.liftley.vodrop.ui.components.dialogs.DeleteDialog
 import com.liftley.vodrop.ui.components.dialogs.EditDialog
 import com.liftley.vodrop.ui.components.dialogs.ModelSelectorDialog
+import com.liftley.vodrop.ui.components.dialogs.TranscriptionModeSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,7 +89,7 @@ fun MainScreen(
                         onLoginClick()
                     }
                 },
-                onModeClick = viewModel::cycleTranscriptionMode
+                onModeClick = viewModel::showTranscriptionModeSheet
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -350,6 +351,14 @@ private fun DialogHost(
                     Text("Cancel")
                 }
             }
+        )
+    }
+    // Transcription Mode Sheet
+    if (uiState.showTranscriptionModeSheet) {
+        TranscriptionModeSheet(
+            currentMode = uiState.transcriptionMode,
+            onModeSelected = viewModel::selectTranscriptionMode,
+            onDismiss = viewModel::hideTranscriptionModeSheet
         )
     }
 }
