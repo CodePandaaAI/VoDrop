@@ -48,6 +48,11 @@ kotlin {
 
             // RevenueCat
             implementation(libs.revenuecat.purchases)
+
+            // Credential Manager (new Google Sign-In)
+            implementation(libs.credentials)
+            implementation(libs.credentials.play.services)
+            implementation(libs.googleid)
         }
 
         commonMain.dependencies {

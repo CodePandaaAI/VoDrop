@@ -13,6 +13,7 @@ import com.liftley.vodrop.stt.SpeechToTextEngine
 import com.liftley.vodrop.stt.TranscriptionResult
 import com.liftley.vodrop.stt.WhisperModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,19 +29,13 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
-/**
- * Simplified recording states - reduced from 6 to 4 phases
- */
 enum class RecordingPhase {
-    IDLE,           // Model not ready, waiting for initialization
-    READY,          // Ready to record
-    LISTENING,      // Currently recording audio
-    PROCESSING      // Transcribing recorded audio
+    IDLE,
+    READY,
+    LISTENING,
+    PROCESSING
 }
 
-/**
- * Single source of truth for all UI state
- */
 data class MainUiState(
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
     val modelState: ModelState = ModelState.NotLoaded,
@@ -53,7 +48,18 @@ data class MainUiState(
     val showModelSelector: Boolean = false,
     val isFirstLaunch: Boolean = true,
     val deleteConfirmationId: Long? = null,
-    val editingTranscription: Transcription? = null
+    val editingTranscription: Transcription? = null,
+
+    // Pro features
+    val isPro: Boolean = false,
+    val isLoggedIn: Boolean = false,
+    val userName: String? = null,
+    val userPhotoUrl: String? = null,
+    val showProfileDialog: Boolean = false,
+    val showUpgradeDialog: Boolean = false,
+    val showLoginPrompt: Boolean = false,
+    val userEmail: String? = null,
+    val improvingTranscriptionId: Long? = null
 )
 
 class MainViewModel(
@@ -65,7 +71,6 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    // ⚡ OPTIMIZED: Track jobs for proper cancellation
     private var modelStateJob: Job? = null
     private var recordingStatusJob: Job? = null
     private var historyJob: Job? = null
@@ -77,6 +82,96 @@ class MainViewModel(
         observeRecordingStatus()
         initializeOnStartup()
         startInactivityChecker()
+    }
+
+    // ========== Pro / Auth State ==========
+
+    fun setProStatus(isPro: Boolean) {
+        _uiState.update { it.copy(isPro = isPro) }
+    }
+
+    fun setUserInfo(isLoggedIn: Boolean, name: String?, email: String?, photoUrl: String?) {
+        _uiState.update {
+            it.copy(
+                isLoggedIn = isLoggedIn,
+                userName = name,
+                userEmail = email,
+                userPhotoUrl = photoUrl
+            )
+        }
+    }
+
+    fun showUpgradeDialog() {
+        _uiState.update { it.copy(showUpgradeDialog = true) }
+    }
+
+    fun hideUpgradeDialog() {
+        _uiState.update { it.copy(showUpgradeDialog = false) }
+    }
+
+    fun showLoginPrompt() {
+        _uiState.update { it.copy(showLoginPrompt = true) }
+    }
+
+    fun hideLoginPrompt() {
+        _uiState.update { it.copy(showLoginPrompt = false) }
+    }
+
+    fun showProfileDialog() {
+        _uiState.update { it.copy(showProfileDialog = true) }
+    }
+
+    fun hideProfileDialog() {
+        _uiState.update { it.copy(showProfileDialog = false) }
+    }
+
+    fun onImproveWithAI(transcription: Transcription) {
+        val state = _uiState.value
+
+        // If not logged in, prompt login first
+        if (!state.isLoggedIn) {
+            showLoginPrompt()
+            return
+        }
+
+        // If not pro, show upgrade dialog
+        if (!state.isPro) {
+            showUpgradeDialog()
+            return
+        }
+
+        // Start improvement
+        _uiState.update { it.copy(improvingTranscriptionId = transcription.id) }
+
+        viewModelScope.launch {
+            try {
+                // Simulate AI improvement (replace with actual Gemini call later)
+                val improvedText = withContext(Dispatchers.IO) {
+                    delay(2000) // Simulate API call
+                    improveText(transcription.text)
+                }
+
+                // Update the transcription in database
+                repository.updateTranscription(transcription.id, improvedText)
+
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to improve: ${e.message}") }
+            } finally {
+                _uiState.update { it.copy(improvingTranscriptionId = null) }
+            }
+        }
+    }
+
+    // Simple text improvement (placeholder - will use Gemini later)
+    private fun improveText(text: String): String {
+        return text
+            .replace(Regex("\\bum+\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\buh+\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\blike\\b,?\\s*", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .replaceFirstChar { it.uppercaseChar() }
+            .let { if (!it.endsWith(".") && !it.endsWith("!") && !it.endsWith("?")) "$it." else it }
     }
 
     // ========== Initialization ==========
@@ -108,10 +203,9 @@ class MainViewModel(
                     val newPhase = when (state) {
                         is ModelState.Ready -> RecordingPhase.READY
                         is ModelState.Error -> RecordingPhase.IDLE
-                        // When model is unloaded, go back to IDLE
                         is ModelState.NotLoaded -> RecordingPhase.IDLE
-                        is ModelState.Downloading -> RecordingPhase.IDLE  // Show downloading state
-                        is ModelState.Loading -> RecordingPhase.IDLE      // Show loading state
+                        is ModelState.Downloading -> RecordingPhase.IDLE
+                        is ModelState.Loading -> RecordingPhase.IDLE
                     }
                     val error = if (state is ModelState.Error) state.message else current.error
                     current.copy(modelState = state, recordingPhase = newPhase, error = error)
@@ -133,9 +227,6 @@ class MainViewModel(
         }
     }
 
-    /**
-     * ⚡ OPTIMIZED: Use stateIn with WhileSubscribed to stop collection when UI is gone
-     */
     private fun loadHistory() {
         historyJob?.cancel()
         historyJob = viewModelScope.launch {
@@ -151,20 +242,13 @@ class MainViewModel(
         }
     }
 
-    /**
-     * ⚡ OPTIMIZED: Periodic check to unload model after inactivity
-     * This saves RAM and battery when app is idle
-     */
     private fun startInactivityChecker() {
         inactivityCheckJob?.cancel()
         inactivityCheckJob = viewModelScope.launch {
             while (isActive) {
-                delay(60_000) // Check every minute
-
-                // Only check if we're in a stable state
+                delay(60_000)
                 val state = _uiState.value
                 if (state.recordingPhase == RecordingPhase.READY) {
-                    // ✅ FIXED: Call via interface - each platform implements as needed
                     sttEngine.checkAndUnloadIfInactive()
                 }
             }
@@ -215,7 +299,7 @@ class MainViewModel(
             }
             RecordingPhase.READY -> startRecording()
             RecordingPhase.LISTENING -> stopRecording()
-            RecordingPhase.PROCESSING -> { /* Ignore clicks while processing */ }
+            RecordingPhase.PROCESSING -> { }
         }
     }
 
@@ -249,7 +333,7 @@ class MainViewModel(
                         it.copy(
                             recordingPhase = RecordingPhase.READY,
                             error = "Recording too short (min 0.5s)",
-                            currentTranscription = ""  // ✅ FIX #12: Clear on error
+                            currentTranscription = ""
                         )
                     }
                     return@launch
@@ -268,7 +352,6 @@ class MainViewModel(
                         }
                     }
                     is TranscriptionResult.Error -> {
-                        // ✅ FIX #12: Clear transcription on error
                         _uiState.update {
                             it.copy(
                                 recordingPhase = RecordingPhase.READY,
@@ -279,7 +362,6 @@ class MainViewModel(
                     }
                 }
             } catch (e: Exception) {
-                // ✅ FIX #12: Clear transcription on error
                 _uiState.update {
                     it.copy(
                         recordingPhase = RecordingPhase.READY,
@@ -329,8 +411,6 @@ class MainViewModel(
         _uiState.update { it.copy(error = null) }
     }
 
-    // ========== Utilities ==========
-
     private fun formatTimestamp(): String {
         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         return "${now.date} ${now.hour.toString().padStart(2, '0')}:${now.minute.toString().padStart(2, '0')}"
@@ -338,13 +418,10 @@ class MainViewModel(
 
     override fun onCleared() {
         super.onCleared()
-
-        // ⚡ Cancel all jobs
         modelStateJob?.cancel()
         recordingStatusJob?.cancel()
         historyJob?.cancel()
         inactivityCheckJob?.cancel()
-
         audioRecorder.release()
         sttEngine.release()
     }

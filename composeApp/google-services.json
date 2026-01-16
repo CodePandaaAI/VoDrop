@@ -12,7 +12,20 @@
           "package_name": "com.liftley.vodrop"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "808998462431-vlg7e4m6vrqq0rfa0sf7lf077uv64itd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.liftley.vodrop",
+            "certificate_hash": "23f87828ace95ba64fc124fa3c886ae0bb4f2b0b"
+          }
+        },
+        {
+          "client_id": "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCg03Vm2kJexKb_AfBXfk4KSnIe5vkNQsU"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
