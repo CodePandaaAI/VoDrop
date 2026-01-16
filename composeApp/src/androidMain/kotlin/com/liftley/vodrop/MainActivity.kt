@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Initialize Auth with Web Client ID
-        authManager = FirebaseAuthManager(this)
+        authManager = FirebaseAuthManager()
         authManager.initialize("808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com")
 
         // Initialize Subscriptions
@@ -97,16 +97,16 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onSignOut = {
-                        lifecycleScope.launch {
-                            authManager.signOut()
-                            subscriptionManager.logout()
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Signed out",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    },
+    lifecycleScope.launch {
+        authManager.signOut(this@MainActivity)  // Add Activity parameter
+        subscriptionManager.logout()
+        Toast.makeText(
+            this@MainActivity,
+            "Signed out",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+},
                     onPurchaseMonthly = {
                         lifecycleScope.launch {
                             subscriptionManager.purchaseMonthly(this@MainActivity)

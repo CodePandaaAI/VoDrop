@@ -32,6 +32,12 @@
 # RevenueCat
 -keep class com.revenuecat.** { *; }
 
+# === Credential Manager (Google Sign-In) ===
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-dontwarn androidx.credentials.**
+-dontwarn com.google.android.libraries.identity.googleid.**
+
 # === Suppress warnings only ===
 -dontwarn com.revenuecat.**
 -dontwarn okhttp3.internal.platform.**

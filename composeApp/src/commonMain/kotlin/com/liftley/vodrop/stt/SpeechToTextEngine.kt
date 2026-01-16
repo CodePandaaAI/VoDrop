@@ -8,38 +8,32 @@ import kotlinx.coroutines.flow.StateFlow
 enum class WhisperModel(
     val displayName: String,
     val emoji: String,
-    val description: String,
-    val sizeDisplay: String,
     val fileName: String,
     val downloadUrl: String,
-    val sizeBytes: Long
+    val sizeBytes: Long,
+    val isProOnly: Boolean,
+    val description: String,
+    val sizeDisplay: String
 ) {
-    FAST(
-        displayName = "Fast",
-        emoji = "⚡",
-        description = "Quick results, good for short notes",
-        sizeDisplay = "~75 MB",
-        fileName = "ggml-tiny.en.bin",
-        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
-        sizeBytes = 75_000_000L
-    ),
     BALANCED(
         displayName = "Balanced",
         emoji = "⚖️",
-        description = "Great accuracy with good speed",
-        sizeDisplay = "~150 MB",
-        fileName = "ggml-base.en.bin",
-        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
-        sizeBytes = 142_000_000L
+        fileName = "ggml-base-q5_1.bin",
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
+        sizeBytes = 57_000_000L,
+        isProOnly = false,
+        description = "Good balance of speed and accuracy",
+        sizeDisplay = "57 MB"
     ),
     QUALITY(
         displayName = "Quality",
         emoji = "✨",
-        description = "Best accuracy for important work",
-        sizeDisplay = "~466 MB",
-        fileName = "ggml-small.en.bin",
-        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-        sizeBytes = 466_000_000L
+        fileName = "ggml-small-q5_1.bin",
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
+        sizeBytes = 181_000_000L,
+        isProOnly = true,
+        description = "Best accuracy, slower processing",
+        sizeDisplay = "181 MB"
     );
 
     companion object {

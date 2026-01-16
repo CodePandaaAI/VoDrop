@@ -161,11 +161,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     )
 
     private fun getModelInfo(model: WhisperModel): ModelInfo = when (model) {
-        WhisperModel.FAST -> ModelInfo(
-            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
-            fileName = "ggml-tiny.en.bin",
-            sizeBytes = 75_000_000L
-        )
         WhisperModel.BALANCED -> ModelInfo(
             url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
             fileName = "ggml-base-q5_1.bin",

@@ -6,8 +6,10 @@ import com.liftley.vodrop.audio.AudioConfig
 import com.liftley.vodrop.audio.AudioRecorder
 import com.liftley.vodrop.audio.AudioRecorderException
 import com.liftley.vodrop.audio.RecordingStatus
+import com.liftley.vodrop.llm.TextCleanupService
 import com.liftley.vodrop.model.Transcription
 import com.liftley.vodrop.repository.TranscriptionRepository
+import com.liftley.vodrop.stt.GroqWhisperService
 import com.liftley.vodrop.stt.ModelState
 import com.liftley.vodrop.stt.SpeechToTextEngine
 import com.liftley.vodrop.stt.TranscriptionResult
@@ -36,6 +38,18 @@ enum class RecordingPhase {
     PROCESSING
 }
 
+/**
+ * Transcription modes for testing:
+ * 0 = Offline only (Whisper.cpp, no AI cleanup)
+ * 1 = Offline + AI (Whisper.cpp + Gemini cleanup)
+ * 2 = Cloud + AI (Groq Whisper + Gemini cleanup)
+ */
+object TranscriptionMode {
+    const val OFFLINE_ONLY = 0
+    const val OFFLINE_WITH_AI = 1
+    const val CLOUD_WITH_AI = 2
+}
+
 data class MainUiState(
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
     val modelState: ModelState = ModelState.NotLoaded,
@@ -59,13 +73,18 @@ data class MainUiState(
     val showUpgradeDialog: Boolean = false,
     val showLoginPrompt: Boolean = false,
     val userEmail: String? = null,
-    val improvingTranscriptionId: Long? = null
+    val improvingTranscriptionId: Long? = null,
+
+    // Testing toggle: 0 = Offline only, 1 = Offline + AI, 2 = Cloud + AI
+    val transcriptionMode: Int = TranscriptionMode.OFFLINE_WITH_AI
 )
 
 class MainViewModel(
     private val repository: TranscriptionRepository,
     private val audioRecorder: AudioRecorder,
-    private val sttEngine: SpeechToTextEngine
+    private val sttEngine: SpeechToTextEngine,
+    private val groqService: GroqWhisperService,
+    private val textCleanupService: TextCleanupService  // Added
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -82,6 +101,23 @@ class MainViewModel(
         observeRecordingStatus()
         initializeOnStartup()
         startInactivityChecker()
+    }
+
+    // ========== Transcription Mode Toggle ==========
+
+    fun cycleTranscriptionMode() {
+        _uiState.update {
+            val newMode = (it.transcriptionMode + 1) % 3
+            println("🔄 Switching transcription mode to: ${getModeDescription(newMode)}")
+            it.copy(transcriptionMode = newMode)
+        }
+    }
+
+    private fun getModeDescription(mode: Int): String = when (mode) {
+        TranscriptionMode.OFFLINE_ONLY -> "Offline Only (Whisper.cpp)"
+        TranscriptionMode.OFFLINE_WITH_AI -> "Offline + AI (Whisper.cpp + Gemini)"
+        TranscriptionMode.CLOUD_WITH_AI -> "Cloud + AI (Groq + Gemini)"
+        else -> "Unknown"
     }
 
     // ========== Pro / Auth State ==========
@@ -145,33 +181,21 @@ class MainViewModel(
 
         viewModelScope.launch {
             try {
-                // Simulate AI improvement (replace with actual Gemini call later)
                 val improvedText = withContext(Dispatchers.IO) {
-                    delay(2000) // Simulate API call
-                    improveText(transcription.text)
+                    improveTextWithGemini(transcription.text)
                 }
 
-                // Update the transcription in database
-                repository.updateTranscription(transcription.id, improvedText)
-
+                if (improvedText != null) {
+                    repository.updateTranscription(transcription.id, improvedText)
+                } else {
+                    _uiState.update { it.copy(error = "Failed to improve text") }
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to improve: ${e.message}") }
             } finally {
                 _uiState.update { it.copy(improvingTranscriptionId = null) }
             }
         }
-    }
-
-    // Simple text improvement (placeholder - will use Gemini later)
-    private fun improveText(text: String): String {
-        return text
-            .replace(Regex("\\bum+\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\buh+\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\blike\\b,?\\s*", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .replaceFirstChar { it.uppercaseChar() }
-            .let { if (!it.endsWith(".") && !it.endsWith("!") && !it.endsWith("?")) "$it." else it }
     }
 
     // ========== Initialization ==========
@@ -339,19 +363,71 @@ class MainViewModel(
                     return@launch
                 }
 
-                val result = withContext(Dispatchers.Default) { sttEngine.transcribe(audioData) }
+                val transcriptionMode = _uiState.value.transcriptionMode
 
+                // Log which mode we're using
+                println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                println("🎤 Starting transcription...")
+                println("📊 Mode: ${getModeDescription(transcriptionMode)}")
+                println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+                // Step 1: Transcription (Offline vs Cloud)
+                val result: TranscriptionResult = when (transcriptionMode) {
+                    TranscriptionMode.CLOUD_WITH_AI -> {
+                        // Cloud mode: Use Groq Whisper Large v3
+                        _uiState.update { it.copy(currentTranscription = "☁️ Transcribing with cloud...") }
+                        println("☁️ Using Groq Whisper (cloud)")
+                        transcribeWithGroq(audioData)
+                    }
+                    else -> {
+                        // Offline modes (0 and 1): Use local Whisper.cpp
+                        _uiState.update { it.copy(currentTranscription = "📱 Transcribing locally...") }
+                        println("📱 Using Whisper.cpp (offline)")
+                        withContext(Dispatchers.Default) { sttEngine.transcribe(audioData) }
+                    }
+                }
+
+                // Step 2: Process result
                 when (result) {
                     is TranscriptionResult.Success -> {
-                        val text = result.text.trim()
+                        var text = result.text.trim()
+                        println("✅ Transcription result: $text")
+
+                        // Step 3: Apply AI cleanup (only in modes 1 and 2)
+                        if (transcriptionMode >= TranscriptionMode.OFFLINE_WITH_AI &&
+                            text.isNotBlank() &&
+                            text.length > 30
+                        ) {
+                            _uiState.update {
+                                it.copy(currentTranscription = "$text\n\n⏳ Improving with AI...")
+                            }
+                            println("🤖 Applying Gemini LLM cleanup...")
+
+                            val improvedText = improveTextWithGemini(text)
+                            if (improvedText != null) {
+                                println("✅ Gemini improvement applied")
+                                text = improvedText
+                            } else {
+                                println("⚠️ Gemini improvement failed, using original")
+                            }
+                        } else {
+                            println("⏭️ Skipping AI cleanup (mode=$transcriptionMode, length=${text.length})")
+                        }
+
                         _uiState.update {
                             it.copy(currentTranscription = text, recordingPhase = RecordingPhase.READY)
                         }
+
                         if (text.isNotBlank()) {
                             repository.insertTranscription(formatTimestamp(), text)
                         }
+
+                        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        println("🎉 Transcription complete!")
+                        println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                     }
                     is TranscriptionResult.Error -> {
+                        println("❌ Transcription error: ${result.message}")
                         _uiState.update {
                             it.copy(
                                 recordingPhase = RecordingPhase.READY,
@@ -362,6 +438,7 @@ class MainViewModel(
                     }
                 }
             } catch (e: Exception) {
+                println("❌ Exception: ${e.message}")
                 _uiState.update {
                     it.copy(
                         recordingPhase = RecordingPhase.READY,
@@ -369,6 +446,43 @@ class MainViewModel(
                         currentTranscription = ""
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Transcribe using Groq's Whisper Large v3 (cloud)
+     */
+    private suspend fun transcribeWithGroq(audioData: ByteArray): TranscriptionResult {
+        return withContext(Dispatchers.IO) {
+            groqService.transcribe(audioData)
+        }
+    }
+
+    /**
+     * Improve text using injected TextCleanupService (Gemini)
+     */
+    private suspend fun improveTextWithGemini(text: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                if (!textCleanupService.isAvailable()) {
+                    println("⚠️ Text cleanup service not available")
+                    return@withContext null
+                }
+
+                val result = textCleanupService.cleanupText(text)
+
+                if (result.isSuccess) {
+                    println("✅ Gemini cleanup successful")
+                    result.getOrNull()
+                } else {
+                    println("⚠️ Gemini cleanup failed: ${result.exceptionOrNull()?.message}")
+                    null
+                }
+            } catch (e: Exception) {
+                println("❌ Gemini error: ${e.message}")
+                e.printStackTrace()
+                null
             }
         }
     }

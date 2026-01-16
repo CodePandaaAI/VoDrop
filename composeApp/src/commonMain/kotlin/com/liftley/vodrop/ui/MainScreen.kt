@@ -79,6 +79,7 @@ fun MainScreen(
                 modelName = "${uiState.selectedModel.emoji} ${uiState.selectedModel.displayName}",
                 isLoggedIn = uiState.isLoggedIn,
                 isPro = uiState.isPro,
+                transcriptionMode = uiState.transcriptionMode,
                 onSettingsClick = viewModel::showModelSelector,
                 onProfileClick = {
                     if (uiState.isLoggedIn) {
@@ -86,7 +87,8 @@ fun MainScreen(
                     } else {
                         onLoginClick()
                     }
-                }
+                },
+                onModeClick = viewModel::cycleTranscriptionMode
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -147,8 +149,10 @@ private fun TopBar(
     modelName: String,
     isLoggedIn: Boolean,
     isPro: Boolean,
+    transcriptionMode: Int,
     onSettingsClick: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onModeClick: () -> Unit
 ) {
     CenterAlignedTopAppBar(
         title = {
@@ -163,6 +167,7 @@ private fun TopBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Model badge
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp)
@@ -174,6 +179,30 @@ private fun TopBar(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
+
+                    // Mode toggle (tappable)
+                    Surface(
+                        onClick = onModeClick,
+                        color = when (transcriptionMode) {
+                            TranscriptionMode.OFFLINE_ONLY -> MaterialTheme.colorScheme.surfaceVariant
+                            TranscriptionMode.OFFLINE_WITH_AI -> MaterialTheme.colorScheme.secondaryContainer
+                            else -> MaterialTheme.colorScheme.tertiaryContainer
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = when (transcriptionMode) {
+                                TranscriptionMode.OFFLINE_ONLY -> "📱 Offline"
+                                TranscriptionMode.OFFLINE_WITH_AI -> "📱+🤖"
+                                else -> "☁️ Cloud"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // PRO badge
                     if (isPro) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiary,
