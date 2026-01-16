@@ -2,6 +2,8 @@ package com.liftley.vodrop.stt
 
 import android.content.Context
 import android.util.Log
+import com.liftley.vodrop.llm.GeminiCleanupService
+import com.liftley.vodrop.llm.LLMConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
@@ -56,6 +58,10 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
     private val modelDirectory: File by lazy {
         File(context.filesDir, "whisper_models").apply { mkdirs() }
+    }
+
+    private val llmService: GeminiCleanupService by lazy {
+        GeminiCleanupService(LLMConfig.GEMINI_API_KEY)
     }
 
     private data class ModelInfo(
@@ -278,9 +284,32 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                             durationMs = durationMs
                         )
                     } else {
+                        // First apply rule-based cleanup
+                        var cleanedText = cleanupTranscription(text)
+
+                        // Then apply LLM cleanup if enabled
+                        Log.d(LOG_TAG, "LLM cleanup enabled: ${LLMConfig.isLLMCleanupEnabled}, available: ${llmService.isAvailable()}")
+                        if (LLMConfig.isLLMCleanupEnabled && llmService.isAvailable()) {
+                            Log.d(LOG_TAG, "Attempting LLM cleanup...")
+                            try {
+                                val llmResult = llmService.cleanupText(cleanedText)
+                                if (llmResult.isSuccess) {
+                                    cleanedText = llmResult.getOrDefault(cleanedText)
+                                    Log.d(LOG_TAG, "LLM cleanup applied successfully")
+                                } else {
+                                    Log.w(LOG_TAG, "LLM cleanup failed, using rule-based result")
+                                }
+                            } catch (e: Exception) {
+                                Log.w(LOG_TAG, "LLM cleanup error: ${e.message}")
+                                // Continue with rule-based cleanup result
+                            }
+                        }
+
+                        val totalDurationMs = System.currentTimeMillis() - startTime
+
                         TranscriptionResult.Success(
-                            text = cleanupTranscription(text),  // <-- Use new function
-                            durationMs = durationMs
+                            text = cleanedText,
+                            durationMs = totalDurationMs
                         )
                     }
                 } catch (e: Exception) {
@@ -324,7 +353,6 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
     override fun release() {
         Log.d(LOG_TAG, "Releasing engine resources")
-        // Only release if not transcribing
         if (!isTranscribing && nativeContext != 0L) {
             try {
                 WhisperJni.release(nativeContext)
@@ -334,6 +362,14 @@ class AndroidSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
             }
             nativeContext = 0L
         }
+
+        // Close LLM service
+        try {
+            llmService.close()
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Error closing LLM service", e)
+        }
+
         httpClient.close()
         _modelState.value = ModelState.NotLoaded
     }

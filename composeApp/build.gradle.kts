@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqldelight)
+    kotlin("plugin.serialization") version "2.1.21"
 }
 
 kotlin {
@@ -59,6 +60,7 @@ kotlin {
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.datetime)
             implementation(libs.ktor.client.core)
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
         }
 
         commonTest.dependencies {
