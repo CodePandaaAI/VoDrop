@@ -1,71 +1,72 @@
 package com.liftley.vodrop.data.stt
 
 /**
- * Rule-based text cleanup for STT output.
- * Uses pre-compiled regex patterns for fast processing.
- * This runs locally without network calls.
+ * Local text cleanup using regex patterns.
+ * Fast, offline processing for basic cleanup.
  */
 object RuleBasedTextCleanup {
 
+    // Patterns
+    private val WHITESPACE = Regex("\\s+")
+    private val REPEATED_WORD = Regex("\\b(\\w+)\\s+\\1\\b", RegexOption.IGNORE_CASE)
+    private val SENTENCE_CAPITALIZE = Regex("([.!?])\\s+([a-z])")
+    private val STANDALONE_I = Regex("\\bi\\b")
+
+    private val FILLERS = listOf(
+        Regex("\\bum+\\b", RegexOption.IGNORE_CASE),
+        Regex("\\buh+\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bah+\\b", RegexOption.IGNORE_CASE),
+        Regex("\\bmm+\\b", RegexOption.IGNORE_CASE),
+        Regex("\\blike\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+        Regex("\\b(you know)\\b(?=\\s*,)", RegexOption.IGNORE_CASE),
+        Regex("\\bbasically\\b(?=\\s*,)", RegexOption.IGNORE_CASE)
+    )
+
+    private val CORRECTIONS = listOf(
+        Regex("\\bgonna\\b", RegexOption.IGNORE_CASE) to "going to",
+        Regex("\\bwanna\\b", RegexOption.IGNORE_CASE) to "want to",
+        Regex("\\bgotta\\b", RegexOption.IGNORE_CASE) to "got to"
+    )
+
     /**
-     * Clean up raw transcription text using rule-based patterns.
-     * Fast and works offline.
+     * Clean transcription text with basic rules.
      */
     fun cleanup(text: String): String {
         if (text.isBlank()) return text
 
         var result = text.trim()
+            .replace(WHITESPACE, " ")
 
-        // Step 1: Normalize whitespace
-        result = result.replace(TextCleanupRules.WHITESPACE, " ")
+        // Remove fillers
+        FILLERS.forEach { result = result.replace(it, "") }
 
-        // Step 2: Remove filler words
-        for (pattern in TextCleanupRules.FILLER_PATTERNS) {
-            result = result.replace(pattern, "")
-        }
+        // Fix stutters
+        result = result.replace(REPEATED_WORD) { it.groupValues[1] }
 
-        // Step 3: Remove repeated words (stuttering)
-        result = result.replace(TextCleanupRules.REPEATED_WORD) { match ->
-            match.groupValues[1]
-        }
-
-        // Step 4: Remove repeated phrases
-        result = result.replace(TextCleanupRules.REPEATED_PHRASE_2) { match ->
-            match.groupValues[1]
-        }
-        result = result.replace(TextCleanupRules.REPEATED_PHRASE_3) { match ->
-            match.groupValues[1]
-        }
-
-        // Step 5: Fix common STT errors
-        for ((pattern, replacement) in TextCleanupRules.CORRECTIONS) {
+        // Apply corrections
+        CORRECTIONS.forEach { (pattern, replacement) ->
             result = result.replace(pattern, replacement)
         }
 
-        // Step 6: Clean up punctuation
-        result = result.replace(TextCleanupRules.MULTIPLE_COMMAS, ",")
-        result = result.replace(TextCleanupRules.COMMA_SPACING, ", ")
-        result = result.replace(TextCleanupRules.WHITESPACE, " ")
-        result = result.replace(TextCleanupRules.COMMA_AT_START, "")
-        result = result.replace(TextCleanupRules.PERIOD_COMMA, ".")
+        // Cleanup punctuation
+        result = result
+            .replace(Regex(",\\s*,"), ",")
+            .replace(Regex("^\\s*,\\s*"), "")
+            .replace(WHITESPACE, " ")
+            .trim()
 
-        // Step 7: Capitalize properly
-        result = result.trim()
+        // Capitalize
         if (result.isNotEmpty()) {
             result = result.replaceFirstChar { it.uppercaseChar() }
+            result = result.replace(SENTENCE_CAPITALIZE) { "${it.groupValues[1]} ${it.groupValues[2].uppercase()}" }
+            result = result.replace(STANDALONE_I, "I")
         }
-        result = result.replace(TextCleanupRules.SENTENCE_CAPITALIZE) { match ->
-            "${match.groupValues[1]} ${match.groupValues[2].uppercase()}"
-        }
-        result = result.replace(TextCleanupRules.STANDALONE_I, "I")
 
-        // Step 8: Add ending punctuation if missing
-        result = result.trim()
-        if (result.isNotEmpty() && !result.endsWith(".") && !result.endsWith("!") && !result.endsWith("?")) {
+        // Add ending punctuation
+        if (result.isNotEmpty() && !result.last().toString().matches(Regex("[.!?]"))) {
             result = "$result."
         }
 
-        // Final cleanup
-        return result.replace(TextCleanupRules.WHITESPACE, " ").trim()
+        return result
     }
 }

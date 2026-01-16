@@ -108,14 +108,15 @@ private fun StatusSection(
 ) {
     val (title, subtitle) = getStatusContent(phase, transcriptionState, progressMessage)
 
+    // ✨ BIGGER, BOLDER title
     Text(
         text = title,
-        style = MaterialTheme.typography.headlineMedium,
+        style = MaterialTheme.typography.headlineLarge,  // Bigger
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center
     )
-    Spacer(modifier = Modifier.height(6.dp))
+    Spacer(modifier = Modifier.height(8.dp))
     Text(
         text = subtitle,
         style = MaterialTheme.typography.bodyLarge,
@@ -123,23 +124,24 @@ private fun StatusSection(
         textAlign = TextAlign.Center
     )
 
-    // Mode indicator
+    // ✨ BIGGER Mode indicator pill
     if (phase == RecordingPhase.READY || phase == RecordingPhase.LISTENING) {
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Surface(
             color = when (transcriptionMode) {
                 TranscriptionMode.STANDARD -> MaterialTheme.colorScheme.surfaceVariant
-                TranscriptionMode.WITH_AI_POLISH -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                TranscriptionMode.WITH_AI_POLISH -> MaterialTheme.colorScheme.tertiaryContainer
             },
-            shape = RoundedCornerShape(8.dp)
+            shape = RoundedCornerShape(12.dp)  // Bigger corners
         ) {
             Text(
                 text = when (transcriptionMode) {
-                    TranscriptionMode.STANDARD -> "🎤 Standard • Groq Whisper"
-                    TranscriptionMode.WITH_AI_POLISH -> "✨ AI Polish • Groq + Gemini"
+                    TranscriptionMode.STANDARD -> "🎤 Standard"
+                    TranscriptionMode.WITH_AI_POLISH -> "✨ AI Polish"
                 },
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                style = MaterialTheme.typography.labelLarge,  // Bigger
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)  // More padding
             )
         }
     }

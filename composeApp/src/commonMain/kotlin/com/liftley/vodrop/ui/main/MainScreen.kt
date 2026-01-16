@@ -43,7 +43,6 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val clipboardManager = LocalClipboardManager.current
 
-    // Show Settings Screen or Main Content
     AnimatedContent(
         targetState = uiState.showSettings,
         transitionSpec = {
@@ -61,7 +60,7 @@ fun MainScreen(
                 currentStyle = uiState.cleanupStyle,
                 userName = uiState.userName,
                 isPro = uiState.isPro,
-                onModeChange = viewModel::selectTranscriptionMode,
+                onModeChange = viewModel::selectMode,
                 onStyleChange = viewModel::setCleanupStyle,
                 onNameChange = viewModel::setUserName,
                 onNavigateBack = viewModel::hideSettings
@@ -97,7 +96,6 @@ private fun MainContent(
     monthlyPrice: String,
     yearlyPrice: String
 ) {
-    // Dialogs
     DialogHost(
         uiState = uiState,
         viewModel = viewModel,
@@ -116,35 +114,25 @@ private fun MainContent(
                 isLoggedIn = uiState.isLoggedIn,
                 isPro = uiState.isPro,
                 transcriptionMode = uiState.transcriptionMode,
-                remainingFree = uiState.remainingFreeTranscriptions,
                 onProfileClick = {
-                    if (uiState.isLoggedIn) {
-                        viewModel.showProfileDialog()
-                    } else {
-                        onLoginClick()
-                    }
+                    if (uiState.isLoggedIn) viewModel.showProfileDialog() else onLoginClick()
                 },
-                onModeClick = viewModel::showTranscriptionModeSheet,
+                onModeClick = viewModel::showModeSheet,
                 onSettingsClick = viewModel::showSettings
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Recording Card
             item {
                 RecordingCard(
                     phase = uiState.recordingPhase,
                     transcriptionState = uiState.transcriptionState,
                     currentTranscription = uiState.currentTranscription,
-                    progressMessage = uiState.progressMessage,
-                    transcriptionMode = uiState.transcriptionMode,
                     error = uiState.error,
                     onRecordClick = viewModel::onRecordClick,
                     onClearError = viewModel::clearError,
@@ -154,7 +142,6 @@ private fun MainContent(
                 )
             }
 
-            // History Section
             if (uiState.history.isNotEmpty()) {
                 item {
                     Text(
@@ -169,7 +156,7 @@ private fun MainContent(
                     HistoryCard(
                         transcription = transcription,
                         isPro = uiState.isPro,
-                        isImproving = uiState.improvingTranscriptionId == transcription.id,
+                        isImproving = uiState.improvingId == transcription.id,
                         onEdit = { viewModel.startEdit(transcription) },
                         onDelete = { viewModel.requestDelete(transcription.id) },
                         onImproveWithAI = { viewModel.onImproveWithAI(transcription) }
@@ -188,7 +175,6 @@ private fun TopBar(
     isLoggedIn: Boolean,
     isPro: Boolean,
     transcriptionMode: TranscriptionMode,
-    remainingFree: Int,
     onProfileClick: () -> Unit,
     onModeClick: () -> Unit,
     onSettingsClick: () -> Unit
@@ -206,7 +192,6 @@ private fun TopBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Mode toggle (tappable)
                     Surface(
                         onClick = onModeClick,
                         color = when (transcriptionMode) {
@@ -223,7 +208,6 @@ private fun TopBar(
                         )
                     }
 
-                    // PRO badge or remaining count
                     if (isPro) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiary,
@@ -234,18 +218,6 @@ private fun TopBar(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onTertiary,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    } else {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = "$remainingFree left",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -294,7 +266,6 @@ private fun DialogHost(
     monthlyPrice: String,
     yearlyPrice: String
 ) {
-    // Delete Confirmation Dialog
     if (uiState.deleteConfirmationId != null) {
         DeleteDialog(
             onConfirm = viewModel::confirmDelete,
@@ -302,7 +273,6 @@ private fun DialogHost(
         )
     }
 
-    // Edit Dialog
     uiState.editingTranscription?.let { transcription ->
         EditDialog(
             transcription = transcription,
@@ -311,11 +281,10 @@ private fun DialogHost(
         )
     }
 
-    // Profile Dialog
     if (uiState.showProfileDialog) {
         ProfileDialog(
             userName = uiState.userName,
-            userEmail = uiState.userEmail,
+            userEmail = null,
             isPro = uiState.isPro,
             onUpgradeClick = {
                 viewModel.hideProfileDialog()
@@ -333,7 +302,6 @@ private fun DialogHost(
         )
     }
 
-    // Upgrade Dialog
     if (uiState.showUpgradeDialog) {
         UpgradeDialog(
             monthlyPrice = monthlyPrice,
@@ -355,36 +323,30 @@ private fun DialogHost(
         )
     }
 
-    // Login Prompt Dialog
     if (uiState.showLoginPrompt) {
         AlertDialog(
             onDismissRequest = viewModel::hideLoginPrompt,
             icon = { Icon(Icons.Rounded.AccountCircle, null) },
             title = { Text("Sign in Required") },
-            text = { Text("Please sign in to use AI features and sync your subscription across devices.") },
+            text = { Text("Please sign in to use AI features.") },
             confirmButton = {
                 Button(onClick = {
                     viewModel.hideLoginPrompt()
                     onLoginClick()
-                }) {
-                    Text("Sign in with Google")
-                }
+                }) { Text("Sign in with Google") }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::hideLoginPrompt) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = viewModel::hideLoginPrompt) { Text("Cancel") }
             }
         )
     }
 
-    // Transcription Mode Sheet
-    if (uiState.showTranscriptionModeSheet) {
+    if (uiState.showModeSheet) {
         TranscriptionModeSheet(
             currentMode = uiState.transcriptionMode,
             isPro = uiState.isPro,
-            onModeSelected = viewModel::selectTranscriptionMode,
-            onDismiss = viewModel::hideTranscriptionModeSheet
+            onModeSelected = viewModel::selectMode,
+            onDismiss = viewModel::hideModeSheet
         )
     }
 }

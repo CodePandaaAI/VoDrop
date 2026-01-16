@@ -4,55 +4,29 @@ import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.stt.TranscriptionState
 import com.liftley.vodrop.domain.model.Transcription
 
-/**
- * Recording flow phases - Clear, distinct states
- */
-enum class RecordingPhase {
-    IDLE,           // Engine not ready
-    READY,          // Ready to record
-    LISTENING,      // Recording audio
-    PROCESSING      // Transcribing
-}
+/** Recording phases */
+enum class RecordingPhase { IDLE, READY, LISTENING, PROCESSING }
 
-/**
- * Transcription modes with detailed descriptions
- */
+/** Transcription modes */
 enum class TranscriptionMode(
     val displayName: String,
     val emoji: String,
-    val description: String,
-    val requiresPro: Boolean
+    val description: String  // Add this back
 ) {
-    STANDARD(
-        displayName = "Standard",
-        emoji = "🎤",
-        description = "Fast cloud transcription without AI cleanup",
-        requiresPro = false
-    ),
-    WITH_AI_POLISH(
-        displayName = "AI Polish",
-        emoji = "✨",
-        description = "Cloud transcription + Gemini 3 Flash cleanup",
-        requiresPro = false  // TESTING: Set to false
-    );
+    STANDARD("Standard", "🎤", "Cloud transcription only"),
+    WITH_AI_POLISH("AI Polish", "✨", "Cloud transcription + Gemini cleanup");
 
-    companion object {
-        val DEFAULT = STANDARD
-    }
+    companion object { val DEFAULT = STANDARD }
 }
 
-/**
- * Main UI state - Single source of truth
- */
+/** Main UI state */
 data class MainUiState(
-    // Recording state
+    // Recording
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
     val transcriptionState: TranscriptionState = TranscriptionState.NotReady,
     val currentTranscription: String = "",
-    val error: String? = null,
-
-    // Progress message for showing detailed status
     val progressMessage: String = "",
+    val error: String? = null,
 
     // History
     val history: List<Transcription> = emptyList(),
@@ -60,44 +34,21 @@ data class MainUiState(
     // Dialogs
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
-    val showTranscriptionModeSheet: Boolean = false,
+    val showModeSheet: Boolean = false,
     val showSettings: Boolean = false,
-
-    // Pro features - TESTING: All forced to true/enabled
-    val isPro: Boolean = true,
-    val isLoggedIn: Boolean = true,
-    val userName: String = "Test User",
-    val userEmail: String? = "test@vodrop.com",
-    val userPhotoUrl: String? = null,
     val showProfileDialog: Boolean = false,
     val showUpgradeDialog: Boolean = false,
     val showLoginPrompt: Boolean = false,
-    val improvingTranscriptionId: Long? = null,
 
-    // Transcription settings
+    // Settings
     val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,
     val cleanupStyle: CleanupStyle = CleanupStyle.DEFAULT,
 
-    // Usage tracking
-    val monthlyTranscriptions: Int = 0,
-    val maxFreeTranscriptions: Int = 999  // TESTING: Unlimited
-) {
-    val canTranscribe: Boolean
-        get() = true  // TESTING: Always allow
+    // User (testing defaults)
+    val isPro: Boolean = true,
+    val isLoggedIn: Boolean = true,
+    val userName: String = "",
 
-    val remainingFreeTranscriptions: Int
-        get() = 999  // TESTING: Always show plenty
-
-    // Helper for UI to determine what's happening
-    val statusMessage: String
-        get() = when {
-            transcriptionState is TranscriptionState.Downloading ->
-                "Downloading model... ${(transcriptionState.progress * 100).toInt()}%"
-            transcriptionState is TranscriptionState.Initializing ->
-                transcriptionState.message
-            recordingPhase == RecordingPhase.LISTENING -> "Listening..."
-            recordingPhase == RecordingPhase.PROCESSING -> progressMessage.ifEmpty { "Processing..." }
-            recordingPhase == RecordingPhase.READY -> "Ready"
-            else -> "Initializing..."
-        }
-}
+    // AI improvement
+    val improvingId: Long? = null
+)

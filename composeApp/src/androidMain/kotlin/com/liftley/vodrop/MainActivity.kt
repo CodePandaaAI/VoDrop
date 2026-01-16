@@ -12,7 +12,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.liftley.vodrop.auth.FirebaseAuthManager
 import com.liftley.vodrop.auth.SubscriptionManager
-import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.preferences.PreferencesManager
 import com.liftley.vodrop.di.appModule
 import com.liftley.vodrop.di.platformModule
@@ -33,12 +32,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var subscriptionManager: SubscriptionManager
     private val preferencesManager: PreferencesManager by inject()
 
-    private val hasMicPermission = mutableStateOf(false)
-
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        hasMicPermission.value = isGranted
         if (!isGranted) {
             Toast.makeText(
                 this,
@@ -51,7 +47,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Koin FIRST
+        // Initialize Koin
         try {
             startKoin {
                 androidLogger()
@@ -62,7 +58,7 @@ class MainActivity : ComponentActivity() {
             // Koin already started
         }
 
-        checkAndRequestMicrophonePermission()
+        checkMicrophonePermission()
 
         // Initialize Auth
         authManager = FirebaseAuthManager()
@@ -79,7 +75,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             VoDropTheme {
-                // Check if onboarding is complete
                 var showOnboarding by remember {
                     mutableStateOf(!preferencesManager.hasCompletedOnboarding())
                 }
@@ -106,14 +101,17 @@ class MainActivity : ComponentActivity() {
     private fun MainAppContent() {
         val viewModel: MainViewModel = koinViewModel()
 
-        // ⚡ TESTING: Force Pro and logged in state
-        viewModel.setProStatus(true)
-        viewModel.setUserInfo(
-            isLoggedIn = true,
-            name = "Test User",
-            email = "test@vodrop.com",
-            photoUrl = null
-        )
+        // ✅ FIX: Only run once when first composed, not on every recomposition
+        LaunchedEffect(Unit) {
+            // TESTING: Force Pro status
+            viewModel.setProStatus(true)
+            viewModel.setUserInfo(
+                isLoggedIn = true,
+                name = "Test User",
+                email = "test@vodrop.com",
+                photoUrl = null
+            )
+        }
 
         MainScreen(
             viewModel = viewModel,
@@ -124,19 +122,11 @@ class MainActivity : ComponentActivity() {
                         val user = result.getOrNull()
                         if (user != null) {
                             subscriptionManager.loginWithFirebaseUser(user.id)
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Welcome, ${user.displayName}!",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            viewModel.setUserInfo(true, user.displayName, user.email, user.photoUrl)
+                            Toast.makeText(this@MainActivity, "Welcome, ${user.displayName}!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        val error = result.exceptionOrNull()?.message ?: "Sign in failed"
-                        Toast.makeText(
-                            this@MainActivity,
-                            error,
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        Toast.makeText(this@MainActivity, result.exceptionOrNull()?.message ?: "Sign in failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -144,11 +134,8 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch {
                     authManager.signOut(this@MainActivity)
                     subscriptionManager.logout()
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Signed out",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    viewModel.setUserInfo(false, null, null, null)
+                    Toast.makeText(this@MainActivity, "Signed out", Toast.LENGTH_SHORT).show()
                 }
             },
             onPurchaseMonthly = {
@@ -176,20 +163,13 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun checkAndRequestMicrophonePermission() {
+    private fun checkMicrophonePermission() {
         when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                hasMicPermission.value = true
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> {
+                // Permission already granted
             }
             shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> {
-                Toast.makeText(
-                    this,
-                    "VoDrop needs microphone access to record your voice",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(this, "VoDrop needs microphone access to record your voice", Toast.LENGTH_LONG).show()
                 requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
             else -> {
