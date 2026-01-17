@@ -45,8 +45,12 @@ class AccessManager(
 
     /**
      * Initialize and load user access state.
+     * 
+     * CRITICAL: This method blocks until ALL data (RevenueCat + Firestore) is loaded
+     * to prevent UI race conditions (e.g., showing 0 trials when user actually has 5).
      */
     suspend fun initialize() {
+        // 1. Start Loading
         _accessState.value = _accessState.value.copy(isLoading = true)
 
         val isLoggedIn = firestoreManager.getCurrentUserId() != null
@@ -60,11 +64,15 @@ class AccessManager(
             return
         }
 
+        // 2. Refresh Pro Status (Wait for it)
+        // We explicitly check status to ensure we have the latest before loading user data
+        subscriptionManager.checkProStatus()
         val isPro = subscriptionManager.isPro.value
+        
         val deviceId = deviceManager.getDeviceId()
         
-        // v1: Simplified - allow all devices (device restriction removed for simplicity)
-        // TODO: Re-add device restriction in future version if needed
+        // 3. Load User Data (Firestore)
+        // This calculates trials/minutes based on the potentially updated Pro status
         loadUserData(deviceId, isPro)
     }
 
@@ -73,24 +81,24 @@ class AccessManager(
         val userData = firestoreManager.getOrCreateUserData(deviceId)
 
         if (userData != null) {
+            // 4. Emit Final State (Atomic update)
             _accessState.value = AccessState(
                 isLoading = false,
                 isLoggedIn = true,
                 isPro = isPro,
-                freeTrialsRemaining = userData.freeTrialsRemaining, // Always from Firestore
+                freeTrialsRemaining = userData.freeTrialsRemaining,
                 usedMinutesThisMonth = userData.getUsedMinutes(),
                 remainingMinutesThisMonth = userData.getRemainingMinutes()
             )
             Log.d(TAG, "✅ Loaded from Firestore: trials=${userData.freeTrialsRemaining}, used=${userData.getUsedMinutes()}min, Pro=$isPro")
         } else {
-            // This should never happen (getOrCreateUserData always returns data)
-            // But if it does, set safe defaults
+            // Fallback (safe default)
             Log.e(TAG, "Failed to get or create user data - this should not happen!")
             _accessState.value = AccessState(
                 isLoading = false,
                 isLoggedIn = true,
                 isPro = isPro,
-                freeTrialsRemaining = 0 // Safe default
+                freeTrialsRemaining = 0 
             )
         }
     }

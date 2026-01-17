@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -8,6 +9,14 @@ plugins {
     alias(libs.plugins.sqldelight)
     kotlin("plugin.serialization") version "2.1.21"
     id("com.google.gms.google-services")
+}
+
+// Load local.properties for signing config
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(localPropertiesFile.inputStream())
+    }
 }
 
 kotlin {
@@ -105,8 +114,23 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+    }
 
-        // No more NDK - we're cloud-only now! 🎉
+    // ✅ ADD THIS: Signing Configurations
+    signingConfigs {
+        // Debug config (uses default debug.keystore)
+        getByName("debug") {
+            // Android Studio handles this automatically
+        }
+
+        // Release config (reads from local.properties)
+        create("release") {
+            // Option 1: Use debug keystore for testing (temporary)
+            storeFile = localProperties.getProperty("RELEASE_STORE_FILE")?.let { file(it) }
+            storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+            keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+            keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+        }
     }
 
     packaging {
@@ -119,6 +143,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release") // ✅ Now this works!
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

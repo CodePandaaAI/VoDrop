@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
         authManager.initialize("808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com")
         subscriptionManager.initialize(authManager.getCurrentUserId())
         lifecycleScope.launch {
-            subscriptionManager.checkProStatus()
+            // AccessManager.initialize() now internally awaits checkProStatus(), so we don't need to call it explicitly here.
             accessManager.initialize()
         }
     }
@@ -131,9 +131,22 @@ class MainActivity : ComponentActivity() {
 
     private fun signOut() {
         lifecycleScope.launch {
-            authManager.signOut(this@MainActivity)
-            subscriptionManager.logout()
+            // 1. Clear local state FIRST (Updates UI immediately)
             accessManager.onUserLoggedOut()
+
+            // 2. Logout from RevenueCat (Best effort)
+            try {
+                subscriptionManager.logout()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 3. Sign out from Firebase & Credential Manager
+            try {
+                authManager.signOut(this@MainActivity)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 

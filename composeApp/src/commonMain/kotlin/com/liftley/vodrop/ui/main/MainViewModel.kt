@@ -162,7 +162,21 @@ class MainViewModel(
      * This ViewModel doesn't handle auth logic directly.
      */
     fun setAuth(isLoggedIn: Boolean, isPro: Boolean, freeTrials: Int) {
-        update { copy(isLoggedIn = isLoggedIn, isPro = isPro, freeTrialsRemaining = freeTrials) }
+        // Only update if changed to avoid recompositions
+        val current = _uiState.value
+        if (current.isLoggedIn != isLoggedIn || current.isPro != isPro || current.freeTrialsRemaining != freeTrials) {
+             // If we are logging in, we might want to clear any old auth errors
+             val newError = if (isLoggedIn && !current.isLoggedIn) null else current.error
+             
+             update { 
+                 copy(
+                     isLoggedIn = isLoggedIn, 
+                     isPro = isPro, 
+                     freeTrialsRemaining = freeTrials,
+                     error = newError
+                 ) 
+             }
+        }
     }
 
     /**
