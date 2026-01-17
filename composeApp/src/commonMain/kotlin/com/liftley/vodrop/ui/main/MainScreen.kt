@@ -1,22 +1,46 @@
 package com.liftley.vodrop.ui.main
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.ui.components.recording.RecordingCard
-import com.liftley.vodrop.ui.components.history.HistoryCard
 import com.liftley.vodrop.ui.components.history.EmptyState
+import com.liftley.vodrop.ui.components.history.HistoryCard
+import com.liftley.vodrop.ui.components.recording.RecordingCard
 
 /**
  * Main screen of VoDrop app.
@@ -69,7 +93,7 @@ fun MainScreen(
                                 DropdownMenuItem(
                                     text = { Text("Sign Out") },
                                     onClick = { showMenu = false; onSignOut() },
-                                    leadingIcon = { Icon(Icons.Default.ExitToApp, null) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }
                                 )
                             }
                         }
@@ -81,9 +105,23 @@ fun MainScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = viewModel::showModeSheet) {
-                        Text(state.transcriptionMode.displayName)
-                    }
+                    // Simple mode toggle (no dialog needed)
+                    FilterChip(
+                        selected = state.transcriptionMode == TranscriptionMode.WITH_AI_POLISH,
+                        onClick = {
+                            if (state.isPro) {
+                                viewModel.selectMode(
+                                    if (state.transcriptionMode == TranscriptionMode.STANDARD)
+                                        TranscriptionMode.WITH_AI_POLISH
+                                    else TranscriptionMode.STANDARD
+                                )
+                            } else {
+                                viewModel.showUpgradeDialog()
+                            }
+                        },
+                        label = { Text(state.transcriptionMode.displayName) },
+                        enabled = state.isLoggedIn
+                    )
                 }
             )
         }
@@ -162,25 +200,5 @@ fun MainScreen(
         )
     }
 
-    // Mode Selection Dialog
-    if (state.showModeSheet) {
-        AlertDialog(
-            onDismissRequest = viewModel::hideModeSheet,
-            title = { Text("Select Mode") },
-            text = {
-                Column {
-                    TranscriptionMode.entries.forEach { mode ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = state.transcriptionMode == mode, onClick = { viewModel.selectMode(mode) })
-                            Text(mode.displayName, modifier = Modifier.padding(start = 8.dp))
-                            if (mode == TranscriptionMode.WITH_AI_POLISH && !state.isPro) {
-                                Text(" (Pro)", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = viewModel::hideModeSheet) { Text("Done") } }
-        )
-    }
+    // REMOVED: Mode selection dialog - now using FilterChip toggle in top bar
 }

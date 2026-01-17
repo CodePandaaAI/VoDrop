@@ -1,22 +1,40 @@
 package com.liftley.vodrop.ui.components.history
 
-import androidx.compose.animation.*
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.domain.model.Transcription
-import kotlinx.coroutines.delay
 
 /**
  * History item card showing a saved transcription.
@@ -45,8 +63,6 @@ fun HistoryCard(
     modifier: Modifier = Modifier
 ) {
     val clipboardManager = LocalClipboardManager.current
-    var showCopiedFeedback by remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier
@@ -81,28 +97,13 @@ fun HistoryCard(
             }
 
             // ═══════════ TEXT CONTENT ═══════════
+            // v1: Show full text (no expand/collapse for simplicity)
             Text(
                 text = transcription.text,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = if (expanded) Int.MAX_VALUE else 4,
-                overflow = TextOverflow.Ellipsis,
                 lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                 modifier = Modifier.fillMaxWidth()
             )
-
-            // Show more/less toggle (only for long text)
-            if (transcription.text.length > 200) {
-                TextButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.align(Alignment.End),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        if (expanded) "Show less" else "Show more",
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -164,35 +165,23 @@ fun HistoryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Copy button (with feedback)
+                // Copy button (simplified - no animation)
                 FilledTonalButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(transcription.text))
-                        showCopiedFeedback = true
                     },
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    AnimatedContent(
-                        targetState = showCopiedFeedback,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
-                        label = "copy_feedback"
-                    ) { copied ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                if (copied) "Copied!" else "Copy",
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
+                    Icon(
+                        Icons.Rounded.ContentCopy,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Copy", fontWeight = FontWeight.Medium)
                 }
 
                 // Edit button
@@ -232,11 +221,4 @@ fun HistoryCard(
         }
     }
 
-    // Auto-dismiss copy feedback after 1.5 seconds
-    if (showCopiedFeedback) {
-        LaunchedEffect(Unit) {
-            delay(1500)
-            showCopiedFeedback = false
-        }
-    }
 }

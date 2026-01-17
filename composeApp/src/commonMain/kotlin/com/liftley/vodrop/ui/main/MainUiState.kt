@@ -60,8 +60,6 @@ data class MainUiState(
     // ═══════════ MODE SELECTION ═══════════
     /** Current transcription mode (Standard or AI Polish) */
     val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,
-    /** Whether to show mode selection dialog */
-    val showModeSheet: Boolean = false,
 
     // ═══════════ DIALOG STATES ═══════════
     /** ID of transcription pending deletion, null if no delete in progress */

@@ -141,11 +141,8 @@ class MainViewModel(
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // MODE SELECTION
+    // MODE SELECTION (Simplified - toggle instead of dialog)
     // ═══════════════════════════════════════════════════════════════
-
-    fun showModeSheet() = update { copy(showModeSheet = true) }
-    fun hideModeSheet() = update { copy(showModeSheet = false) }
 
     fun selectMode(mode: TranscriptionMode) {
         // AI Polish requires Pro
@@ -153,7 +150,7 @@ class MainViewModel(
             update { copy(showUpgradeDialog = true) }
             return
         }
-        update { copy(transcriptionMode = mode, showModeSheet = false) }
+        update { copy(transcriptionMode = mode) }
     }
 
     // ═══════════════════════════════════════════════════════════════
