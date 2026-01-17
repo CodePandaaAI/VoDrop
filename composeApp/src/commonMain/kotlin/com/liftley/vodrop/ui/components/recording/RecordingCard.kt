@@ -34,14 +34,14 @@ fun RecordingCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(36.dp),
+        shape = RoundedCornerShape(32.dp), // Material 3 Expressive: Larger corners
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(40.dp),
+                .padding(48.dp), // Material 3 Expressive: More padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Status Text (simplified - inline)
@@ -60,44 +60,46 @@ fun RecordingCard(
                 else -> "Getting Ready..." to "Connecting to cloud..."
             }
             
+            // Material 3 Expressive: Bigger, bolder text
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge, // Bigger
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp)) // More spacing
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium, // Bigger
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             
-            // Mode indicator
+            // Mode indicator (Material 3 Expressive: Bigger)
             if (phase == RecordingPhase.READY || phase == RecordingPhase.LISTENING) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Surface(
                     color = when (transcriptionMode) {
                         TranscriptionMode.STANDARD -> MaterialTheme.colorScheme.surfaceVariant
                         TranscriptionMode.WITH_AI_POLISH -> MaterialTheme.colorScheme.tertiaryContainer
                     },
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(20.dp) // Bigger corners
                 ) {
                     Text(
                         text = when (transcriptionMode) {
                             TranscriptionMode.STANDARD -> "🎤 Standard"
                             TranscriptionMode.WITH_AI_POLISH -> "✨ AI Polish"
                         },
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.titleSmall, // Bigger
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp) // More padding
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(24.dp)) // More spacing
 
             // Download Progress (Desktop only - simplified)
             if (transcriptionState is TranscriptionState.Downloading) {
@@ -123,7 +125,7 @@ fun RecordingCard(
                 Spacer(modifier = Modifier.height(40.dp))
             }
 
-            // Big Record Button
+            // Material 3 Expressive: Bigger record button
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -132,91 +134,103 @@ fun RecordingCard(
                     phase = phase,
                     transcriptionState = transcriptionState,
                     onClick = onRecordClick,
-                    size = 140.dp
+                    size = 160.dp // Bigger button
                 )
             }
 
-            // Current Transcription Result (simplified - inline)
+            // Current Transcription Result (Material 3 Expressive: Bigger text, more padding)
             if (currentTranscription.isNotEmpty() && phase != RecordingPhase.PROCESSING) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(40.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(28.dp), // Bigger corners
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
                     )
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(modifier = Modifier.padding(28.dp)) { // More padding
                         Text(
                             text = currentTranscription,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodyLarge, // Already good size
+                            fontWeight = FontWeight.Normal,
                             color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
+                            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.2f // More line spacing
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
                         FilledTonalButton(
                             onClick = onCopyTranscription,
                             modifier = Modifier.align(Alignment.End),
-                            shape = RoundedCornerShape(16.dp),
-                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                            shape = RoundedCornerShape(20.dp), // Bigger corners
+                            contentPadding = PaddingValues(horizontal = 28.dp, vertical = 16.dp) // More padding
                         ) {
                             Icon(
                                 Icons.Rounded.ContentCopy,
                                 null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(22.dp) // Bigger icon
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text("Copy", fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "Copy",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
             }
 
-            // Progress indicator during transcription (simplified)
+            // Progress indicator (Material 3 Expressive: Bigger)
             if (phase == RecordingPhase.PROCESSING && progressMessage.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(28.dp))
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp), // More padding
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp), // Bigger
+                        strokeWidth = 3.dp, // Thicker
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(16.dp)) // More spacing
                     Text(
                         text = progressMessage,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge, // Bigger
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
 
-            // Error Message (simplified - inline)
+            // Error Message (Material 3 Expressive: Bigger text, more padding)
             error?.let {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(28.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(24.dp), // Bigger corners
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp), // More padding
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = it,
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge, // Bigger
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         TextButton(
                             onClick = onClearError,
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(16.dp), // Bigger corners
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                         ) {
-                            Text("Dismiss", fontWeight = FontWeight.Medium)
+                            Text(
+                                "Dismiss",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }

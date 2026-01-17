@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Empty state placeholder when no transcriptions exist
- * Material 3 Expressive: Bigger icon, better hierarchy
+ * Material 3 Expressive: Bigger icon, bolder text, more spacing
  */
 @Composable
 fun EmptyState(
@@ -24,28 +24,29 @@ fun EmptyState(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(56.dp),
+            .padding(64.dp), // Material 3 Expressive: More padding
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
-                imageVector = Icons.Rounded.Mic,  // Rounded icon
+                imageVector = Icons.Rounded.Mic,
                 contentDescription = null,
-                modifier = Modifier.size(80.dp),  // Bigger
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                modifier = Modifier.size(96.dp), // Material 3 Expressive: Bigger icon
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp)) // More spacing
             Text(
                 text = "No transcriptions yet",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineSmall, // Material 3 Expressive: Bigger
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp)) // More spacing
             Text(
                 text = "Tap the microphone above to start recording",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge, // Material 3 Expressive: Bigger
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )

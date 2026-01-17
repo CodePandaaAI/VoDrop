@@ -73,9 +73,14 @@ class FirebaseAuthManager {
         } catch (e: GetCredentialCancellationException) {
             Log.d(TAG, "Sign in cancelled by user")
             Result.failure(Exception("Sign in cancelled"))
+        } catch (e: GetCredentialException) {
+            Log.e(TAG, "GetCredentialException in signInWithGoogle (type=${e.type}, class=${e.javaClass.name}): ${e.message}", e)
+            e.printStackTrace()
+            Result.failure(Exception("Sign-in failed: ${e.message}. Please check your Google account settings."))
         } catch (e: Exception) {
-            Log.e(TAG, "Sign in failed: ${e.message}", e)
-            Result.failure(e)
+            Log.e(TAG, "Sign in failed (class=${e.javaClass.name}): ${e.message}", e)
+            e.printStackTrace()
+            Result.failure(Exception("Sign-in failed: ${e.message}. Please try again."))
         }
     }
 
@@ -104,14 +109,21 @@ class FirebaseAuthManager {
                 context = activity,
                 request = request
             )
-        } catch (_: NoCredentialException) {
-            Log.d(TAG, "No credential found with filterByAuthorized=$filterByAuthorized")
+        } catch (e: NoCredentialException) {
+            Log.d(TAG, "No credential found with filterByAuthorized=$filterByAuthorized: ${e.message}")
             null
         } catch (e: GetCredentialCancellationException) {
             Log.d(TAG, "User cancelled credential request")
             throw e
         } catch (e: GetCredentialException) {
-            Log.e(TAG, "GetCredentialException (type=${e.type}): ${e.message}", e)
+            Log.e(TAG, "GetCredentialException (type=${e.type}, class=${e.javaClass.name}): ${e.message}", e)
+            // Log the full exception stack trace for debugging
+            e.printStackTrace()
+            if (!filterByAuthorized) throw e
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected exception in tryGetCredential (class=${e.javaClass.name}): ${e.message}", e)
+            e.printStackTrace()
             if (!filterByAuthorized) throw e
             null
         }
