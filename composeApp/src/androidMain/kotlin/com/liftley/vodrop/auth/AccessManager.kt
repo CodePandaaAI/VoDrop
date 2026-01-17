@@ -28,24 +28,19 @@ class AccessManager(
 
     /**
      * Current access state for the user.
+     * 
+     * v1: Simplified - no device conflict handling.
      */
     data class AccessState(
         val isLoading: Boolean = true,
         val isLoggedIn: Boolean = false,
         val isPro: Boolean = false,
-        val freeTrialsRemaining: Int = 3,
+        val freeTrialsRemaining: Int = 0, // Default to 0 (only set when logged in)
         val usedMinutesThisMonth: Int = 0,
-        val remainingMinutesThisMonth: Int = 120,
-        val deviceConflict: Boolean = false
+        val remainingMinutesThisMonth: Int = 120
     ) {
         // REMOVED: canTranscribe - duplicate of MainUiState.canTranscribe
-
-        /**
-         * Whether Pro user has minutes remaining this month.
-         * TODO: Use this when implementing "Pro minutes exhausted" blocking
-         */
-        val hasProMinutesRemaining: Boolean
-            get() = remainingMinutesThisMonth > 0
+        // REMOVED: hasProMinutesRemaining - not used in v1 (will be used when implementing Pro minutes limit blocking)
     }
 
     /**
@@ -54,32 +49,27 @@ class AccessManager(
     suspend fun initialize() {
         _accessState.value = _accessState.value.copy(isLoading = true)
 
-        val userId = firestoreManager.getCurrentUserId()
-        val isLoggedIn = userId != null
+        val isLoggedIn = firestoreManager.getCurrentUserId() != null
 
         if (!isLoggedIn) {
-            _accessState.value = AccessState(isLoading = false, isLoggedIn = false)
+            _accessState.value = AccessState(
+                isLoading = false,
+                isLoggedIn = false,
+                freeTrialsRemaining = 0 // Explicitly reset to 0 when logged out
+            )
             return
         }
 
         val isPro = subscriptionManager.isPro.value
         val deviceId = deviceManager.getDeviceId()
-        val isActiveDevice = firestoreManager.isActiveDevice(deviceId)
-
-        if (!isActiveDevice) {
-            _accessState.value = AccessState(
-                isLoading = false,
-                isLoggedIn = true,
-                isPro = isPro,
-                deviceConflict = true
-            )
-            return
-        }
-
+        
+        // v1: Simplified - allow all devices (device restriction removed for simplicity)
+        // TODO: Re-add device restriction in future version if needed
         loadUserData(deviceId, isPro)
     }
 
     private suspend fun loadUserData(deviceId: String, isPro: Boolean) {
+        Log.d(TAG, "Loading user data from Firestore...")
         val userData = firestoreManager.getOrCreateUserData(deviceId)
 
         if (userData != null) {
@@ -87,63 +77,97 @@ class AccessManager(
                 isLoading = false,
                 isLoggedIn = true,
                 isPro = isPro,
-                freeTrialsRemaining = userData.freeTrialsRemaining,
+                freeTrialsRemaining = userData.freeTrialsRemaining, // Always from Firestore
                 usedMinutesThisMonth = userData.getUsedMinutes(),
-                remainingMinutesThisMonth = userData.getRemainingMinutes(),
-                deviceConflict = false
+                remainingMinutesThisMonth = userData.getRemainingMinutes()
             )
-            Log.d(TAG, "Loaded: trials=${userData.freeTrialsRemaining}, used=${userData.getUsedMinutes()}min")
+            Log.d(TAG, "✅ Loaded from Firestore: trials=${userData.freeTrialsRemaining}, used=${userData.getUsedMinutes()}min, Pro=$isPro")
         } else {
+            // This should never happen (getOrCreateUserData always returns data)
+            // But if it does, set safe defaults
+            Log.e(TAG, "Failed to get or create user data - this should not happen!")
             _accessState.value = AccessState(
                 isLoading = false,
                 isLoggedIn = true,
-                isPro = isPro
+                isPro = isPro,
+                freeTrialsRemaining = 0 // Safe default
             )
         }
     }
 
-    /**
-     * Handle device switch when user chooses to use this device.
-     * TODO: Implement device conflict UI dialog in MainActivity that calls this
-     */
-    suspend fun switchToThisDevice() {
-        val deviceId = deviceManager.getDeviceId()
-        firestoreManager.updateActiveDevice(deviceId)
-        loadUserData(deviceId, _accessState.value.isPro)
-    }
+    // REMOVED: switchToThisDevice() - device restriction removed for v1 simplicity
 
     /**
      * Record transcription usage after successful transcription.
+     * 
+     * IMPORTANT: Always refetch from Firestore after update to ensure consistency.
      */
     suspend fun recordTranscriptionUsage(durationSeconds: Long) {
         val currentState = _accessState.value
+        
+        // Must be logged in to record usage
+        if (!currentState.isLoggedIn) {
+            Log.w(TAG, "Cannot record usage: user not logged in")
+            return
+        }
+        
+        val deviceId = deviceManager.getDeviceId()
+        val isPro = currentState.isPro // Use synced state instead of reading directly
 
-        if (currentState.isPro) {
-            firestoreManager.addUsage(durationSeconds)
-            val userData = firestoreManager.getUserData()
-            if (userData != null) {
-                _accessState.value = currentState.copy(
-                    usedMinutesThisMonth = userData.getUsedMinutes(),
-                    remainingMinutesThisMonth = userData.getRemainingMinutes()
-                )
+        if (isPro) {
+            // Update Pro usage
+            val success = firestoreManager.addUsage(durationSeconds)
+            if (success) {
+                Log.d(TAG, "Updated Pro usage: +${durationSeconds}s")
+                // Refetch fresh data from Firestore
+                loadUserData(deviceId, isPro)
+            } else {
+                Log.e(TAG, "Failed to update Pro usage in Firestore")
             }
         } else {
-            firestoreManager.decrementFreeTrial()
-            _accessState.value = currentState.copy(
-                freeTrialsRemaining = (currentState.freeTrialsRemaining - 1).coerceAtLeast(0)
-            )
+            // Decrement free trial
+            val success = firestoreManager.decrementFreeTrial()
+            if (success) {
+                Log.d(TAG, "Decremented free trial in Firestore")
+                // Refetch fresh data from Firestore to get accurate count
+                loadUserData(deviceId, isPro)
+            } else {
+                Log.e(TAG, "Failed to decrement free trial in Firestore")
+            }
         }
     }
 
     suspend fun onUserLoggedIn() {
+        Log.d(TAG, "User logged in - initializing and fetching from Firestore...")
         initialize()
     }
 
     fun onUserLoggedOut() {
-        _accessState.value = AccessState(isLoading = false, isLoggedIn = false)
+        // Reset all state when user logs out
+        _accessState.value = AccessState(
+            isLoading = false,
+            isLoggedIn = false,
+            freeTrialsRemaining = 0, // Explicitly reset to 0
+            isPro = false
+        )
+        Log.d(TAG, "User logged out - state reset")
     }
 
-    fun updateProStatus(isPro: Boolean) {
-        _accessState.value = _accessState.value.copy(isPro = isPro)
+    /**
+     * Update Pro status (called when RevenueCat subscription changes).
+     * Refreshes user data from Firestore to ensure consistency.
+     */
+    suspend fun updateProStatus(isPro: Boolean) {
+        val currentState = _accessState.value
+        if (!currentState.isLoggedIn) {
+            // Not logged in, just update Pro status
+            _accessState.value = currentState.copy(isPro = isPro)
+            return
+        }
+        
+        // Logged in - refresh user data with new Pro status
+        val deviceId = deviceManager.getDeviceId()
+        loadUserData(deviceId, isPro)
+        Log.d(TAG, "Pro status updated: $isPro - refreshed user data")
     }
 }

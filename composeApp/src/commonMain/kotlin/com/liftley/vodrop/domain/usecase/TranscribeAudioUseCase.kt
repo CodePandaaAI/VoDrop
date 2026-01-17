@@ -1,15 +1,19 @@
 package com.liftley.vodrop.domain.usecase
 
+import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.llm.TextCleanupService
-import com.liftley.vodrop.data.preferences.PreferencesManager
 import com.liftley.vodrop.data.stt.SpeechToTextEngine
 import com.liftley.vodrop.data.stt.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
+/**
+ * Use case for transcribing audio to text.
+ * 
+ * v1: Uses INFORMAL cleanup style (hardcoded, no user selection).
+ */
 class TranscribeAudioUseCase(
     private val sttEngine: SpeechToTextEngine,
-    private val cleanupService: TextCleanupService,
-    private val prefsManager: PreferencesManager
+    private val cleanupService: TextCleanupService
 ) {
     sealed interface Result {
         data class Success(val text: String, val usedAI: Boolean) : Result
@@ -50,7 +54,7 @@ class TranscribeAudioUseCase(
 
     private suspend fun applyPolish(text: String): String? {
         if (!cleanupService.isAvailable()) return null
-        val style = prefsManager.getPreferences().cleanupStyle
-        return cleanupService.cleanupText(text, style).getOrNull()
+        // v1: Hardcode to INFORMAL style (simple, natural cleanup)
+        return cleanupService.cleanupText(text, CleanupStyle.INFORMAL).getOrNull()
     }
 }

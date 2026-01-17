@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,10 +57,27 @@ fun MainScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (state.isLoggedIn) onSignOut() else onLoginClick() }) {
-                        Icon(Icons.Default.Person, "Account",
-                            tint = if (state.isLoggedIn) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (state.isLoggedIn) {
+                        // Logged in: Show profile menu
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.Person, "Profile",
+                                    tint = MaterialTheme.colorScheme.primary)
+                            }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Sign Out") },
+                                    onClick = { showMenu = false; onSignOut() },
+                                    leadingIcon = { Icon(Icons.Default.ExitToApp, null) }
+                                )
+                            }
+                        }
+                    } else {
+                        // Not logged in: Show login button
+                        TextButton(onClick = onLoginClick) {
+                            Text("Sign In", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 },
                 actions = {

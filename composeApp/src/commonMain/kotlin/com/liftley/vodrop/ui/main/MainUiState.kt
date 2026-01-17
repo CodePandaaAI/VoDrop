@@ -76,8 +76,8 @@ data class MainUiState(
     val isLoggedIn: Boolean = false,
     /** Whether user has Pro subscription (via RevenueCat) */
     val isPro: Boolean = false,
-    /** Remaining free trial count (0-3) */
-    val freeTrialsRemaining: Int = 3,
+    /** Remaining free trial count (0-3). Default 0, only set when logged in from Firestore. */
+    val freeTrialsRemaining: Int = 0,
 
     // ═══════════ AI IMPROVEMENT ═══════════
     /** ID of history item currently being improved with AI, null if none */

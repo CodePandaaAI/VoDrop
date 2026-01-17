@@ -85,9 +85,18 @@ class MainActivity : ComponentActivity() {
     private fun App() {
         val viewModel: MainViewModel = koinViewModel()
         val accessState by accessManager.accessState.collectAsState()
+        val isPro by subscriptionManager.isPro.collectAsState()
 
+        // Sync access state to ViewModel
         LaunchedEffect(accessState) {
             viewModel.setAuth(accessState.isLoggedIn, accessState.isPro, accessState.freeTrialsRemaining)
+        }
+
+        // Update AccessManager when Pro status changes (from RevenueCat)
+        LaunchedEffect(isPro) {
+            if (accessState.isLoggedIn) {
+                accessManager.updateProStatus(isPro)
+            }
         }
 
         LaunchedEffect(viewModel) {
@@ -95,8 +104,6 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch { accessManager.recordTranscriptionUsage(seconds) }
             }
         }
-
-        // TODO: Handle accessState.deviceConflict == true with device switch dialog
 
         MainScreen(
             viewModel = viewModel,

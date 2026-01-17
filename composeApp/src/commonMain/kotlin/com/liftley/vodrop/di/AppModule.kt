@@ -34,7 +34,6 @@ import org.koin.dsl.module
  *
  * TranscribeAudioUseCase ◄── sttEngine: SpeechToTextEngine (platform)
  *                        ◄── cleanupService: TextCleanupService (platform)
- *                        ◄── prefsManager: PreferencesManager (platform)
  * ```
  */
 val appModule = module {
@@ -54,8 +53,8 @@ val appModule = module {
     // TranscribeAudioUseCase dependencies:
     // - sttEngine: SpeechToTextEngine (from createSpeechToTextEngine())
     // - cleanupService: TextCleanupService (from platformModule)
-    // - prefsManager: PreferencesManager (from platformModule)
-    single { TranscribeAudioUseCase(get(), get(), get()) }
+    // v1: No PreferencesManager - CleanupStyle hardcoded to INFORMAL
+    single { TranscribeAudioUseCase(get(), get()) }
     single { ManageHistoryUseCase(get()) }
 
     // ═══════════ VIEWMODEL ═══════════

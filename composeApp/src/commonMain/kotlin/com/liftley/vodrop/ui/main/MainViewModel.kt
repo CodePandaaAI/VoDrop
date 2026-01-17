@@ -169,12 +169,14 @@ class MainViewModel(
     }
 
     /**
-     * Called after successful transcription to decrement local trial count.
-     * Note: Actual decrement happens in Firestore via AccessManager.
+     * REMOVED: decrementTrials()
+     * 
+     * Trial decrement is handled by AccessManager.recordTranscriptionUsage()
+     * which updates Firestore and then refetches fresh data.
+     * The ViewModel receives updated state via setAuth() from MainActivity.
+     * 
+     * No local decrement needed - Firestore is the source of truth.
      */
-    fun decrementTrials() {
-        update { copy(freeTrialsRemaining = (freeTrialsRemaining - 1).coerceAtLeast(0)) }
-    }
 
     // ═══════════════════════════════════════════════════════════════
     // DIALOGS

@@ -1,10 +1,9 @@
-# === ESSENTIAL: JNI Native Methods ===
+# === ESSENTIAL: JNI Native Methods (for future if needed) ===
 -keepclasseswithmembernames class * {
     native <methods>;
 }
--keep class com.liftley.vodrop.data.stt.WhisperJni { *; }
 
-# === ESSENTIAL: Kotlinx Serialization (for Gemini API) ===
+# === ESSENTIAL: Kotlinx Serialization (for Gemini/Groq API) ===
 -keepattributes *Annotation*
 -keep class kotlinx.serialization.** { *; }
 -keepclassmembers @kotlinx.serialization.Serializable class ** {
@@ -13,33 +12,43 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# === ESSENTIAL: Keep sealed class subclasses (for when expressions) ===
--keep class com.liftley.vodrop.stt.ModelState$* { *; }
--keep class com.liftley.vodrop.stt.TranscriptionResult$* { *; }
--keep class com.liftley.vodrop.audio.RecordingStatus$* { *; }
+# === App's serializable data classes ===
+-keep class com.liftley.vodrop.data.stt.GroqWhisperService$* { *; }
+-keep class com.liftley.vodrop.data.llm.GeminiCleanupService$* { *; }
 
-# === ESSENTIAL: SQLDelight generated code ===
+# === Keep sealed class subclasses (for when expressions) ===
+-keep class com.liftley.vodrop.data.stt.TranscriptionState$* { *; }
+-keep class com.liftley.vodrop.data.stt.TranscriptionResult$* { *; }
+-keep class com.liftley.vodrop.data.audio.RecordingStatus$* { *; }
+
+# === SQLDelight generated code ===
 -keep class com.liftley.vodrop.db.** { *; }
 
-# ... existing rules ...
-
-# Firebase
+# === Firebase ===
 -keep class com.google.firebase.** { *; }
 -keep class com.google.android.gms.** { *; }
 -dontwarn com.google.firebase.**
 -dontwarn com.google.android.gms.**
 
-# RevenueCat
+# === RevenueCat ===
 -keep class com.revenuecat.** { *; }
+-dontwarn com.revenuecat.**
 
 # === Credential Manager (Google Sign-In) ===
 -keep class androidx.credentials.** { *; }
+-keep class androidx.credentials.playservices.** { *; }
 -keep class com.google.android.libraries.identity.googleid.** { *; }
+-keepclassmembers class androidx.credentials.** { *; }
+-keep class * extends androidx.credentials.Credential { *; }
+-keep class * extends androidx.credentials.CredentialOption { *; }
+-keep class androidx.credentials.exceptions.** { *; }
 -dontwarn androidx.credentials.**
 -dontwarn com.google.android.libraries.identity.googleid.**
 
-# === Suppress warnings only ===
--dontwarn com.revenuecat.**
+# === Firestore UserData ===
+-keep class com.liftley.vodrop.data.firestore.UserData { *; }
+
+# === Suppress other warnings ===
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.conscrypt.**

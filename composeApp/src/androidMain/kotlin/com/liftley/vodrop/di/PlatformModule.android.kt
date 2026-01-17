@@ -8,8 +8,6 @@ import com.liftley.vodrop.data.firestore.FirestoreManager
 import com.liftley.vodrop.data.llm.GeminiCleanupService
 import com.liftley.vodrop.data.llm.LLMConfig
 import com.liftley.vodrop.data.llm.TextCleanupService
-import com.liftley.vodrop.data.preferences.AndroidPreferencesManager
-import com.liftley.vodrop.data.preferences.PreferencesManager
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import org.koin.android.ext.koin.androidContext
@@ -34,7 +32,6 @@ import org.koin.dsl.module
  * FirestoreManager ────────────┤
  * DeviceManager ───────────────┘
  *
- * PreferencesManager ◄── AndroidPreferencesManager
  * TextCleanupService ◄── GeminiCleanupService
  * ```
  *
@@ -56,9 +53,6 @@ val platformModule = module {
     // ═══════════ ACCESS MANAGER ═══════════
     // Combines: auth state + subscription + device restriction + usage tracking
     single { AccessManager(get(), get(), get()) }
-
-    // ═══════════ PREFERENCES ═══════════
-    single<PreferencesManager> { AndroidPreferencesManager() }
 
     // ═══════════ TEXT CLEANUP (Gemini) ═══════════
     // TODO: Move API key to secure backend before production release
