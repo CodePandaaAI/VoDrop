@@ -8,13 +8,13 @@
 
 ## 1. Technical Stack & Architecture
 
-| Component | Technology | Implementation Detail |
-| :--- | :--- | :--- |
-| **Project Type** | Kotlin Multiplatform (KMP) | Targets: `android`, `ios`, `desktop` (JVM). |
-| **UI** | Compose Multiplatform (CMP) | Shared UI in `commonMain`. |
-| **Core Engine** | **Whisper.cpp** | Integrated via **Kotlin/Native C Interop** in a `commonMain` module. |
-| **Local Database** | **SQLDelight** | Used for storing transcription history and settings in a `commonMain` module. |
-| **Project File** | `VoDrop_Project_Brief_Final.md` | This file is included in the project root for full context. |
+| Component          | Technology                      | Implementation Detail                                                         |
+|:-------------------|:--------------------------------|:------------------------------------------------------------------------------|
+| **Project Type**   | Kotlin Multiplatform (KMP)      | Targets: `android`, `ios`, `desktop` (JVM).                                   |
+| **UI**             | Compose Multiplatform (CMP)     | Shared UI in `commonMain`.                                                    |
+| **Core Engine**    | **Whisper.cpp**                 | Integrated via **Kotlin/Native C Interop** in a `commonMain` module.          |
+| **Local Database** | **SQLDelight**                  | Used for storing transcription history and settings in a `commonMain` module. |
+| **Project File**   | `VoDrop_Project_Brief_Final.md` | This file is included in the project root for full context.                   |
 
 ---
 

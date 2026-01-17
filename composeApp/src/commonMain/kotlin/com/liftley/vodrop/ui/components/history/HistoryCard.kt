@@ -1,5 +1,6 @@
 package com.liftley.vodrop.ui.components.history
 
+import androidx.compose.animation.*
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,22 @@ import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.domain.model.Transcription
 import kotlinx.coroutines.delay
 
+/**
+ * History item card showing a saved transcription.
+ *
+ * Features:
+ * - Expandable text (show more/less for long texts)
+ * - Copy to clipboard with visual feedback
+ * - Edit and Delete actions
+ * - "Improve with AI" button (Pro feature)
+ *
+ * @param transcription The transcription data to display
+ * @param isPro Whether user has Pro subscription
+ * @param isImproving Whether this item is currently being improved by AI
+ * @param onEdit Called when user taps Edit
+ * @param onDelete Called when user taps Delete
+ * @param onImproveWithAI Called when user taps "Improve with AI"
+ */
 @Composable
 fun HistoryCard(
     transcription: Transcription,
@@ -28,23 +45,23 @@ fun HistoryCard(
     modifier: Modifier = Modifier
 ) {
     val clipboardManager = LocalClipboardManager.current
-    var showCopiedToast by remember { mutableStateOf(false) }
+    var showCopiedFeedback by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
-        shape = RoundedCornerShape(24.dp),  // ✨ Bigger corners
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp)  // ✨ More padding
+            modifier = Modifier.padding(20.dp)
         ) {
-            // Timestamp - More prominent
+            // ═══════════ TIMESTAMP ═══════════
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -63,17 +80,17 @@ fun HistoryCard(
                 )
             }
 
-            // Text content - Better readability
+            // ═══════════ TEXT CONTENT ═══════════
             Text(
                 text = transcription.text,
-                style = MaterialTheme.typography.bodyLarge,  // ✨ Bigger text
+                style = MaterialTheme.typography.bodyLarge,
                 maxLines = if (expanded) Int.MAX_VALUE else 4,
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Show more/less
+            // Show more/less toggle (only for long text)
             if (transcription.text.length > 200) {
                 TextButton(
                     onClick = { expanded = !expanded },
@@ -89,12 +106,12 @@ fun HistoryCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ✨ Improve with AI Button - BIG & PROMINENT
+            // ═══════════ IMPROVE WITH AI BUTTON ═══════════
             Button(
                 onClick = onImproveWithAI,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),  // ✨ Bigger touch target
+                    .height(52.dp),
                 enabled = !isImproving,
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -142,29 +159,40 @@ fun HistoryCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Action buttons - BIGGER touch targets
+            // ═══════════ ACTION BUTTONS ═══════════
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Copy button
+                // Copy button (with feedback)
                 FilledTonalButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(transcription.text))
-                        showCopiedToast = true
+                        showCopiedFeedback = true
                     },
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    Icon(
-                        Icons.Rounded.ContentCopy,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Copy", fontWeight = FontWeight.Medium)
+                    AnimatedContent(
+                        targetState = showCopiedFeedback,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "copy_feedback"
+                    ) { copied ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                if (copied) "Copied!" else "Copy",
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
 
                 // Edit button
@@ -204,10 +232,11 @@ fun HistoryCard(
         }
     }
 
-    if (showCopiedToast) {
+    // Auto-dismiss copy feedback after 1.5 seconds
+    if (showCopiedFeedback) {
         LaunchedEffect(Unit) {
             delay(1500)
-            showCopiedToast = false
+            showCopiedFeedback = false
         }
     }
 }

@@ -66,7 +66,7 @@ class GroqWhisperService(
             val response = httpClient.submitFormWithBinaryData(
                 url = API_URL,
                 formData = formData {
-                    append("file", wavData, Headers.Companion.build {
+                    append("file", wavData, Headers.build {
                         append(HttpHeaders.ContentType, "audio/wav")
                         append(HttpHeaders.ContentDisposition, "filename=\"audio.wav\"")
                     })
@@ -191,7 +191,8 @@ class GroqWhisperService(
     }
 
     /**
-     * Check if service is available
+     * Check if service is available (has valid API key).
+     * TODO: Use this for network connectivity check before transcription
      */
     fun isAvailable(): Boolean = apiKey.isNotBlank()
 }

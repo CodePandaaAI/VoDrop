@@ -9,12 +9,11 @@ import com.revenuecat.purchases.Package
 import com.revenuecat.purchases.PurchaseParams
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
-import com.revenuecat.purchases.interfaces.UpdatedCustomerInfoListener
 import com.revenuecat.purchases.awaitCustomerInfo
 import com.revenuecat.purchases.awaitLogIn
 import com.revenuecat.purchases.awaitLogOut
-import com.revenuecat.purchases.awaitOfferings
 import com.revenuecat.purchases.awaitPurchase
+import com.revenuecat.purchases.interfaces.UpdatedCustomerInfoListener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,27 +77,6 @@ class SubscriptionManager(private val context: Context) {
     }
 
     /**
-     * Fetch available packages
-     */
-    suspend fun fetchPackages() {
-        try {
-            val offerings = Purchases.sharedInstance.awaitOfferings()
-            val currentOffering = offerings.current
-            monthlyPackage = currentOffering?.monthly
-            Log.d(TAG, "Monthly package: ${monthlyPackage?.identifier}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching packages", e)
-        }
-    }
-
-    /**
-     * Get formatted monthly price
-     */
-    fun getMonthlyPrice(): String {
-        return monthlyPackage?.product?.price?.formatted ?: AuthConfig.PRICE_MONTHLY_USD
-    }
-
-    /**
      * Purchase monthly subscription
      */
     suspend fun purchaseMonthly(activity: Activity): Boolean {
@@ -120,18 +98,22 @@ class SubscriptionManager(private val context: Context) {
     }
 
     /**
-     * Restore purchases (for users who reinstall)
+     * Fetch available packages from RevenueCat.
+     * TODO: Call this from MainActivity.initAuth() to get real prices
      */
-    suspend fun restorePurchases(): Boolean {
-        return try {
-            val customerInfo = Purchases.sharedInstance.awaitCustomerInfo()
-            updateProStatus(customerInfo)
-            _isPro.value
-        } catch (e: Exception) {
-            Log.e(TAG, "Restore error", e)
-            false
-        }
-    }
+    suspend fun fetchPackages() {}
+
+    /**
+     * Get formatted monthly price from RevenueCat.
+     * TODO: Use this instead of hardcoded AuthConfig.PRICE_MONTHLY_USD
+     */
+    fun getMonthlyPrice() {}
+
+    /**
+     * Restore purchases (for users who reinstall).
+     * TODO: Add "Restore Purchases" button in Settings screen post-v1
+     */
+    suspend fun restorePurchases() {}
 
     /**
      * Link RevenueCat with Firebase user

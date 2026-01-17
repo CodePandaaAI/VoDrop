@@ -4,7 +4,8 @@ import com.liftley.vodrop.data.llm.CleanupStyle
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Interface for managing user preferences
+ * Interface for managing user preferences.
+ * Platform implementation provided via Koin DI.
  */
 interface PreferencesManager {
     val preferences: Flow<UserPreferences>
@@ -16,4 +17,5 @@ interface PreferencesManager {
     fun hasCompletedOnboarding(): Boolean
 }
 
-expect fun createPreferencesManager(): PreferencesManager
+// REMOVED: expect fun createPreferencesManager(): PreferencesManager
+// Using Koin DI instead: single<PreferencesManager> { AndroidPreferencesManager() }

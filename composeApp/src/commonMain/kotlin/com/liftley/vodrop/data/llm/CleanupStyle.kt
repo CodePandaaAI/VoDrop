@@ -2,7 +2,11 @@ package com.liftley.vodrop.data.llm
 
 /**
  * Text cleanup styles that affect how Gemini processes transcriptions.
- * Each style inherits the base cleanup rules but adds its own characteristics.
+ *
+ * The displayName, emoji, description, and example fields are used for
+ * the Settings UI where users can select their preferred style.
+ *
+ * TODO: Implement Settings screen with style selection post-v1
  */
 enum class CleanupStyle(
     val displayName: String,

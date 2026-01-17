@@ -13,6 +13,18 @@ import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+/**
+ * ViewModel for the main screen.
+ *
+ * Responsibilities:
+ * - Recording flow control (start/stop)
+ * - Transcription via cloud STT
+ * - History management (CRUD)
+ * - Auth state synchronization (receives from Activity)
+ *
+ * Note: Auth logic lives in AccessManager (Android). This ViewModel
+ * just receives and displays the auth state.
+ */
 class MainViewModel(
     private val audioRecorder: AudioRecorder,
     private val sttEngine: SpeechToTextEngine,
@@ -23,6 +35,11 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+    /**
+     * Callback invoked after successful transcription.
+     * Used by Activity to track usage in Firestore.
+     * @param Long - duration in seconds
+     */
     var onTranscriptionComplete: ((Long) -> Unit)? = null
 
     init {
@@ -32,22 +49,28 @@ class MainViewModel(
         initializeEngine()
     }
 
-    private fun initializeEngine() {
-        viewModelScope.launch {
-            try { sttEngine.initialize() }
-            catch (e: Exception) { update { copy(error = e.message) } }
-        }
-    }
+    // ═══════════════════════════════════════════════════════════════
+    // RECORDING FLOW
+    // ═══════════════════════════════════════════════════════════════
 
-    // ═══════════ RECORDING ═══════════
-
+    /**
+     * Main record button handler.
+     * Behavior depends on current phase:
+     * - IDLE: Initialize engine
+     * - READY: Start recording
+     * - LISTENING: Stop and transcribe
+     * - PROCESSING: No-op
+     */
     fun onRecordClick() {
         val state = _uiState.value
 
+        // Gate: Must be logged in
         if (!state.isLoggedIn) {
             update { copy(error = "Please sign in first") }
             return
         }
+
+        // Gate: Must have access (Pro or trials)
         if (!state.canTranscribe) {
             update { copy(showUpgradeDialog = true) }
             return
@@ -57,7 +80,17 @@ class MainViewModel(
             RecordingPhase.IDLE -> initializeEngine()
             RecordingPhase.READY -> startRecording()
             RecordingPhase.LISTENING -> stopRecording()
-            RecordingPhase.PROCESSING -> {}
+            RecordingPhase.PROCESSING -> { /* No-op while processing */ }
+        }
+    }
+
+    private fun initializeEngine() {
+        viewModelScope.launch {
+            try {
+                sttEngine.initialize()
+            } catch (e: Exception) {
+                update { copy(error = e.message) }
+            }
         }
     }
 
@@ -80,11 +113,13 @@ class MainViewModel(
                 val audioData = audioRecorder.stopRecording()
                 val duration = AudioConfig.calculateDurationSeconds(audioData)
 
+                // Minimum recording length check
                 if (duration < 0.5f) {
                     update { copy(recordingPhase = RecordingPhase.READY, error = "Too short") }
                     return@launch
                 }
 
+                // Transcribe
                 val result = transcribeUseCase(audioData, _uiState.value.transcriptionMode) { msg ->
                     update { copy(progressMessage = msg) }
                 }
@@ -105,12 +140,15 @@ class MainViewModel(
         }
     }
 
-    // ═══════════ MODE ═══════════
+    // ═══════════════════════════════════════════════════════════════
+    // MODE SELECTION
+    // ═══════════════════════════════════════════════════════════════
 
     fun showModeSheet() = update { copy(showModeSheet = true) }
     fun hideModeSheet() = update { copy(showModeSheet = false) }
 
     fun selectMode(mode: TranscriptionMode) {
+        // AI Polish requires Pro
         if (mode == TranscriptionMode.WITH_AI_POLISH && !_uiState.value.isPro) {
             update { copy(showUpgradeDialog = true) }
             return
@@ -118,24 +156,39 @@ class MainViewModel(
         update { copy(transcriptionMode = mode, showModeSheet = false) }
     }
 
-    // ═══════════ AUTH (called from Activity) ═══════════
+    // ═══════════════════════════════════════════════════════════════
+    // AUTH STATE (Synced from Activity/AccessManager)
+    // ═══════════════════════════════════════════════════════════════
 
+    /**
+     * Called from Activity when auth state changes.
+     * This ViewModel doesn't handle auth logic directly.
+     */
     fun setAuth(isLoggedIn: Boolean, isPro: Boolean, freeTrials: Int) {
         update { copy(isLoggedIn = isLoggedIn, isPro = isPro, freeTrialsRemaining = freeTrials) }
     }
 
+    /**
+     * Called after successful transcription to decrement local trial count.
+     * Note: Actual decrement happens in Firestore via AccessManager.
+     */
     fun decrementTrials() {
         update { copy(freeTrialsRemaining = (freeTrialsRemaining - 1).coerceAtLeast(0)) }
     }
 
-    // ═══════════ DIALOGS ═══════════
+    // ═══════════════════════════════════════════════════════════════
+    // DIALOGS
+    // ═══════════════════════════════════════════════════════════════
 
     fun showUpgradeDialog() = update { copy(showUpgradeDialog = true) }
     fun hideUpgradeDialog() = update { copy(showUpgradeDialog = false) }
     fun clearError() = update { copy(error = null) }
 
-    // ═══════════ HISTORY ═══════════
+    // ═══════════════════════════════════════════════════════════════
+    // HISTORY MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
 
+    // Delete flow
     fun requestDelete(id: Long) = update { copy(deleteConfirmationId = id) }
     fun cancelDelete() = update { copy(deleteConfirmationId = null) }
     fun confirmDelete() {
@@ -146,6 +199,7 @@ class MainViewModel(
         }
     }
 
+    // Edit flow
     fun startEdit(t: Transcription) = update { copy(editingTranscription = t) }
     fun cancelEdit() = update { copy(editingTranscription = null) }
     fun saveEdit(text: String) {
@@ -156,17 +210,27 @@ class MainViewModel(
         }
     }
 
+    // AI improvement (for existing history items)
     fun onImproveWithAI(t: Transcription) {
-        if (!_uiState.value.isPro) { showUpgradeDialog(); return }
+        if (!_uiState.value.isPro) {
+            showUpgradeDialog()
+            return
+        }
         update { copy(improvingId = t.id) }
         viewModelScope.launch {
             try {
-                transcribeUseCase.improveText(t.text)?.let { historyUseCase.updateTranscription(t.id, it) }
-            } finally { update { copy(improvingId = null) } }
+                transcribeUseCase.improveText(t.text)?.let {
+                    historyUseCase.updateTranscription(t.id, it)
+                }
+            } finally {
+                update { copy(improvingId = null) }
+            }
         }
     }
 
-    // ═══════════ OBSERVERS ═══════════
+    // ═══════════════════════════════════════════════════════════════
+    // OBSERVERS
+    // ═══════════════════════════════════════════════════════════════
 
     private fun observeEngineState() {
         viewModelScope.launch {
@@ -184,7 +248,9 @@ class MainViewModel(
     private fun observeRecordingStatus() {
         viewModelScope.launch {
             audioRecorder.status.collect { status ->
-                if (status is RecordingStatus.Error) update { copy(error = status.message, recordingPhase = RecordingPhase.READY) }
+                if (status is RecordingStatus.Error) {
+                    update { copy(error = status.message, recordingPhase = RecordingPhase.READY) }
+                }
             }
         }
     }
@@ -196,6 +262,10 @@ class MainViewModel(
                 .collect { update { copy(history = it) } }
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════════════════════
 
     private inline fun update(block: MainUiState.() -> MainUiState) = _uiState.update(block)
 

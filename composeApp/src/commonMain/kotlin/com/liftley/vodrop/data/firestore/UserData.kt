@@ -71,7 +71,7 @@ data class UserData(
     // Check if monthly usage should be reset
     fun shouldResetMonthlyUsage(): Boolean {
         if (usageResetDate.isEmpty()) return false
-        val today = Companion.getTodayDate()
+        val today = getTodayDate()
         return today >= usageResetDate
     }
 
@@ -87,7 +87,10 @@ data class UserData(
         return (currentMonthUsageSeconds / 60).toInt()
     }
 
-    // Check if Pro user has exceeded limit
+    /**
+     * Check if Pro user has exceeded monthly limit.
+     * TODO: Use this in AccessManager to block transcription when limit exceeded
+     */
     fun hasExceededProLimit(): Boolean {
         return currentMonthUsageSeconds >= PRO_MONTHLY_LIMIT_SECONDS
     }

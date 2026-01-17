@@ -2,6 +2,7 @@ package com.liftley.vodrop.data.firestore
 
 import android.content.Context
 import java.util.UUID
+import androidx.core.content.edit
 
 /**
  * Manages device identification for single-device restriction
@@ -25,16 +26,18 @@ class DeviceManager(private val context: Context) {
 
         if (deviceId == null) {
             deviceId = UUID.randomUUID().toString()
-            prefs.edit().putString(KEY_DEVICE_ID, deviceId).apply()
+            prefs.edit { putString(KEY_DEVICE_ID, deviceId) }
         }
 
         return deviceId
     }
 
     /**
-     * Clear device ID (for testing only)
+     * Clear device ID (for testing only).
+     * Should not be used in production code.
      */
+    @Suppress("unused") // Testing utility
     fun clearDeviceId() {
-        prefs.edit().remove(KEY_DEVICE_ID).apply()
+        prefs.edit { remove(KEY_DEVICE_ID) }
     }
 }

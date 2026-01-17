@@ -10,18 +10,25 @@ import kotlinx.coroutines.flow.asStateFlow
 private const val TAG = "AccessManager"
 
 /**
- * Unified access control manager
+ * Unified access control manager for VoDrop v1.
+ *
  * Handles: Login state, device restriction, usage tracking, Pro status
+ *
+ * @see FirestoreManager for Firestore operations
+ * @see DeviceManager for device ID management
+ * @see SubscriptionManager for RevenueCat integration
  */
 class AccessManager(
     private val firestoreManager: FirestoreManager,
     private val deviceManager: DeviceManager,
     private val subscriptionManager: SubscriptionManager
 ) {
-    // Access state
     private val _accessState = MutableStateFlow(AccessState())
     val accessState: StateFlow<AccessState> = _accessState.asStateFlow()
 
+    /**
+     * Current access state for the user.
+     */
     data class AccessState(
         val isLoading: Boolean = true,
         val isLoggedIn: Boolean = false,
@@ -31,15 +38,18 @@ class AccessManager(
         val remainingMinutesThisMonth: Int = 120,
         val deviceConflict: Boolean = false
     ) {
-        val canTranscribe: Boolean
-            get() = isLoggedIn && (isPro || freeTrialsRemaining > 0)
+        // REMOVED: canTranscribe - duplicate of MainUiState.canTranscribe
 
+        /**
+         * Whether Pro user has minutes remaining this month.
+         * TODO: Use this when implementing "Pro minutes exhausted" blocking
+         */
         val hasProMinutesRemaining: Boolean
             get() = remainingMinutesThisMonth > 0
     }
 
     /**
-     * Initialize and load user access state
+     * Initialize and load user access state.
      */
     suspend fun initialize() {
         _accessState.value = _accessState.value.copy(isLoading = true)
@@ -52,10 +62,7 @@ class AccessManager(
             return
         }
 
-        // Check Pro status
         val isPro = subscriptionManager.isPro.value
-
-        // Check device
         val deviceId = deviceManager.getDeviceId()
         val isActiveDevice = firestoreManager.isActiveDevice(deviceId)
 
@@ -69,13 +76,9 @@ class AccessManager(
             return
         }
 
-        // Load user data
         loadUserData(deviceId, isPro)
     }
 
-    /**
-     * Load user data from Firestore
-     */
     private suspend fun loadUserData(deviceId: String, isPro: Boolean) {
         val userData = firestoreManager.getOrCreateUserData(deviceId)
 
@@ -100,7 +103,8 @@ class AccessManager(
     }
 
     /**
-     * Handle device switch (user chose to use this device)
+     * Handle device switch when user chooses to use this device.
+     * TODO: Implement device conflict UI dialog in MainActivity that calls this
      */
     suspend fun switchToThisDevice() {
         val deviceId = deviceManager.getDeviceId()
@@ -109,16 +113,13 @@ class AccessManager(
     }
 
     /**
-     * Called after successful transcription
+     * Record transcription usage after successful transcription.
      */
     suspend fun recordTranscriptionUsage(durationSeconds: Long) {
         val currentState = _accessState.value
 
         if (currentState.isPro) {
-            // Track minutes for Pro users
             firestoreManager.addUsage(durationSeconds)
-
-            // Reload to get updated counts
             val userData = firestoreManager.getUserData()
             if (userData != null) {
                 _accessState.value = currentState.copy(
@@ -127,7 +128,6 @@ class AccessManager(
                 )
             }
         } else {
-            // Decrement free trial
             firestoreManager.decrementFreeTrial()
             _accessState.value = currentState.copy(
                 freeTrialsRemaining = (currentState.freeTrialsRemaining - 1).coerceAtLeast(0)
@@ -135,23 +135,14 @@ class AccessManager(
         }
     }
 
-    /**
-     * Called when user logs in
-     */
     suspend fun onUserLoggedIn() {
         initialize()
     }
 
-    /**
-     * Called when user logs out
-     */
     fun onUserLoggedOut() {
         _accessState.value = AccessState(isLoading = false, isLoggedIn = false)
     }
 
-    /**
-     * Called when Pro status changes
-     */
     fun updateProStatus(isPro: Boolean) {
         _accessState.value = _accessState.value.copy(isPro = isPro)
     }

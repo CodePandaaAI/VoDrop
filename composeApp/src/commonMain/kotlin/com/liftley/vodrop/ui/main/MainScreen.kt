@@ -17,6 +17,20 @@ import com.liftley.vodrop.ui.components.recording.RecordingCard
 import com.liftley.vodrop.ui.components.history.HistoryCard
 import com.liftley.vodrop.ui.components.history.EmptyState
 
+/**
+ * Main screen of VoDrop app.
+ *
+ * Layout:
+ * - Top bar with user account (left) and mode selector (right)
+ * - Recording card for voice capture
+ * - History list of previous transcriptions
+ *
+ * Dialogs:
+ * - Delete confirmation
+ * - Edit transcription
+ * - Upgrade to Pro
+ * - Mode selection
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
@@ -24,10 +38,9 @@ fun MainScreen(
     onLoginClick: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onPurchaseMonthly: () -> Unit = {},
-    onPurchaseYearly: () -> Unit = {},
-    onRestorePurchases: () -> Unit = {},
-    monthlyPrice: String = "$2.99",
-    yearlyPrice: String = ""
+    monthlyPrice: String = "$2.99"
+    // TODO: Add onRestorePurchases when implementing purchase restoration
+    // TODO: Add yearlyPrice when yearly plan is added post-v1
 ) {
     val state by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboardManager.current
@@ -62,6 +75,7 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // ═══════════ RECORDING SECTION ═══════════
             item {
                 RecordingCard(
                     phase = state.recordingPhase,
@@ -76,6 +90,7 @@ fun MainScreen(
                 )
             }
 
+            // ═══════════ HISTORY SECTION ═══════════
             if (state.history.isEmpty()) {
                 item { EmptyState() }
             } else {
@@ -96,6 +111,7 @@ fun MainScreen(
 
     // ═══════════ DIALOGS ═══════════
 
+    // Delete Confirmation Dialog
     if (state.deleteConfirmationId != null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
@@ -105,6 +121,7 @@ fun MainScreen(
         )
     }
 
+    // Edit Transcription Dialog
     state.editingTranscription?.let { t ->
         var text by remember { mutableStateOf(t.text) }
         AlertDialog(
@@ -116,6 +133,7 @@ fun MainScreen(
         )
     }
 
+    // Upgrade to Pro Dialog
     if (state.showUpgradeDialog) {
         AlertDialog(
             onDismissRequest = viewModel::hideUpgradeDialog,
@@ -126,6 +144,7 @@ fun MainScreen(
         )
     }
 
+    // Mode Selection Dialog
     if (state.showModeSheet) {
         AlertDialog(
             onDismissRequest = viewModel::hideModeSheet,

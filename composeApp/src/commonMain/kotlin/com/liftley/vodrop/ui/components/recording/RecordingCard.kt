@@ -76,7 +76,9 @@ fun RecordingCard(
             }
 
             // Current Transcription Result
-            if (currentTranscription.isNotEmpty() && !currentTranscription.startsWith("☁️") && !currentTranscription.startsWith("✨")) {
+            // Note: progressMessage starts with emoji during processing, but currentTranscription
+            // should only show actual results, not progress messages
+            if (currentTranscription.isNotEmpty() && phase != RecordingPhase.PROCESSING) {
                 Spacer(modifier = Modifier.height(32.dp))
                 TranscriptionResultCard(
                     text = currentTranscription,

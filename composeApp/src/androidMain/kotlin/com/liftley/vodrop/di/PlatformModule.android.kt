@@ -15,27 +15,55 @@ import io.ktor.client.engine.okhttp.*
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
+/**
+ * Koin module for Android-specific dependencies.
+ *
+ * Provides:
+ * - Database driver (SQLDelight)
+ * - Auth/Subscription managers (Firebase, RevenueCat)
+ * - Firestore managers (user data, device ID)
+ * - Access manager (unified access control)
+ * - Text cleanup service (Gemini API)
+ * - Preferences manager (SharedPreferences)
+ * - HTTP client (OkHttp)
+ *
+ * Dependency Graph (Android-specific):
+ * ```
+ * FirebaseAuthManager ─────────┐
+ * SubscriptionManager ─────────┼──► AccessManager
+ * FirestoreManager ────────────┤
+ * DeviceManager ───────────────┘
+ *
+ * PreferencesManager ◄── AndroidPreferencesManager
+ * TextCleanupService ◄── GeminiCleanupService
+ * ```
+ *
+ * @see appModule for common dependencies
+ */
 val platformModule = module {
-    // Database
+
+    // ═══════════ DATABASE ═══════════
     single { DatabaseDriverFactory(androidContext()) }
 
-    // Auth & Subscription
+    // ═══════════ AUTH & SUBSCRIPTION ═══════════
     single { FirebaseAuthManager() }
     single { SubscriptionManager(androidContext()) }
 
-    // Firestore & Device
+    // ═══════════ FIRESTORE ═══════════
     single { FirestoreManager() }
     single { DeviceManager(androidContext()) }
 
-    // Access Manager (combines all access logic)
+    // ═══════════ ACCESS MANAGER ═══════════
+    // Combines: auth state + subscription + device restriction + usage tracking
     single { AccessManager(get(), get(), get()) }
 
-    // Preferences
+    // ═══════════ PREFERENCES ═══════════
     single<PreferencesManager> { AndroidPreferencesManager() }
 
-    // Text cleanup service (Gemini)
+    // ═══════════ TEXT CLEANUP (Gemini) ═══════════
+    // TODO: Move API key to secure backend before production release
     single<TextCleanupService> { GeminiCleanupService(LLMConfig.GEMINI_API_KEY) }
 
-    // HttpClient
+    // ═══════════ HTTP CLIENT ═══════════
     single { HttpClient(OkHttp) }
 }

@@ -643,9 +643,9 @@ val platformModule = module {
 
 # 🔗 Related Documentation
 
-- [Previous Session: STT LLM Integration](./SESSION_SUMMARY_STT_LLM_INTEGRATION.md)
-- [Previous Session: Pro Features](./SESSION_SUMMARY_PRO_FEATURES.md)
-- [Previous Session: Android STT](./SESSION_SUMMARY_ANDROID_STT.md)
+- [Previous Session: STT LLM Integration](SESSION_SUMMARY_STT_LLM_INTEGRATION.md)
+- [Previous Session: Pro Features](SESSION_SUMMARY_PRO_FEATURES.md)
+- [Previous Session: Android STT](SESSION_SUMMARY_ANDROID_STT.md)
 - [Groq API Documentation](https://console.groq.com/docs)
 - [Gemini API Documentation](https://ai.google.dev/docs)
 

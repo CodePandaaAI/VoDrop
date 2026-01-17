@@ -10,7 +10,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import androidx.core.content.edit
 
+/**
+ * Android implementation of PreferencesManager using SharedPreferences.
+ */
 class AndroidPreferencesManager : PreferencesManager, KoinComponent {
 
     private val context: Context by inject()
@@ -44,21 +48,21 @@ class AndroidPreferencesManager : PreferencesManager, KoinComponent {
 
     override suspend fun setUserName(name: String) {
         withContext(Dispatchers.IO) {
-            prefs.edit().putString(KEY_USER_NAME, name).apply()
+            prefs.edit { putString(KEY_USER_NAME, name) }
             _preferences.value = _preferences.value.copy(userName = name)
         }
     }
 
     override suspend fun setCleanupStyle(style: CleanupStyle) {
         withContext(Dispatchers.IO) {
-            prefs.edit().putString(KEY_CLEANUP_STYLE, style.name).apply()
+            prefs.edit { putString(KEY_CLEANUP_STYLE, style.name) }
             _preferences.value = _preferences.value.copy(cleanupStyle = style)
         }
     }
 
     override suspend fun completeOnboarding() {
         withContext(Dispatchers.IO) {
-            prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETE, true).apply()
+            prefs.edit { putBoolean(KEY_ONBOARDING_COMPLETE, true) }
             _preferences.value = _preferences.value.copy(hasCompletedOnboarding = true)
         }
     }
@@ -72,4 +76,5 @@ class AndroidPreferencesManager : PreferencesManager, KoinComponent {
     }
 }
 
-actual fun createPreferencesManager(): PreferencesManager = AndroidPreferencesManager()
+// REMOVED: actual fun createPreferencesManager(): PreferencesManager = AndroidPreferencesManager()
+// Using Koin DI instead

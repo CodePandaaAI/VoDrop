@@ -16,14 +16,14 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingExcept
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 private const val TAG = "FirebaseAuthManager"
 
+/**
+ * User data model
+ */
 data class User(
     val id: String,
     val email: String?,
@@ -31,27 +31,16 @@ data class User(
     val photoUrl: String?
 )
 
+/**
+ * Handles Firebase Authentication with Google Sign-In via Credential Manager.
+ */
 class FirebaseAuthManager {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-
     private var webClientId: String = ""
 
-    private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    init {
-        auth.currentUser?.let { firebaseUser ->
-            _currentUser.value = firebaseUser.toUser()
-        }
-
-        auth.addAuthStateListener { firebaseAuth ->
-            _currentUser.value = firebaseAuth.currentUser?.toUser()
-        }
-    }
+    // REMOVED: currentUser StateFlow - not observed anywhere
+    // REMOVED: isLoading StateFlow - not observed anywhere
 
     fun initialize(webClientId: String) {
         this.webClientId = webClientId
@@ -60,20 +49,15 @@ class FirebaseAuthManager {
 
     /**
      * Sign in with Google using Credential Manager.
-     * IMPORTANT: activityContext MUST be an Activity, not Application context!
      */
     suspend fun signInWithGoogle(activity: Activity): Result<User> {
         if (webClientId.isEmpty()) {
             return Result.failure(Exception("Web Client ID not set. Call initialize() first."))
         }
 
-        _isLoading.value = true
-
         return try {
-            // Create CredentialManager with Activity context
             val credentialManager = CredentialManager.create(activity)
 
-            // First try with authorized accounts (faster if user already signed in before)
             Log.d(TAG, "Attempting sign-in with authorized accounts first...")
             val result = tryGetCredential(credentialManager, activity, filterByAuthorized = true)
                 ?: run {
@@ -92,8 +76,6 @@ class FirebaseAuthManager {
         } catch (e: Exception) {
             Log.e(TAG, "Sign in failed: ${e.message}", e)
             Result.failure(e)
-        } finally {
-            _isLoading.value = false
         }
     }
 
@@ -103,38 +85,34 @@ class FirebaseAuthManager {
         filterByAuthorized: Boolean
     ): GetCredentialResponse? {
         return try {
-            // Generate a unique nonce for each request (required for security)
             val nonce = UUID.randomUUID().toString()
 
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(filterByAuthorized)
                 .setServerClientId(webClientId)
-                .setAutoSelectEnabled(filterByAuthorized) // Auto-select only for authorized
-                .setNonce(nonce) // CRITICAL: Must set nonce!
+                .setAutoSelectEnabled(filterByAuthorized)
+                .setNonce(nonce)
                 .build()
 
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(googleIdOption)
                 .build()
 
-            Log.d(TAG, "Making credential request (filterByAuthorized=$filterByAuthorized, nonce=$nonce)")
+            Log.d(TAG, "Making credential request (filterByAuthorized=$filterByAuthorized)")
 
             credentialManager.getCredential(
-                context = activity,  // MUST be Activity, not Context
+                context = activity,
                 request = request
             )
-        } catch (e: NoCredentialException) {
-            Log.d(TAG, "No credential found with filterByAuthorized=$filterByAuthorized: ${e.message}")
+        } catch (_: NoCredentialException) {
+            Log.d(TAG, "No credential found with filterByAuthorized=$filterByAuthorized")
             null
         } catch (e: GetCredentialCancellationException) {
             Log.d(TAG, "User cancelled credential request")
-            throw e // Re-throw to be handled by caller
+            throw e
         } catch (e: GetCredentialException) {
             Log.e(TAG, "GetCredentialException (type=${e.type}): ${e.message}", e)
-            if (!filterByAuthorized) {
-                // If this was the second attempt, throw to show error
-                throw e
-            }
+            if (!filterByAuthorized) throw e
             null
         }
     }
@@ -170,7 +148,6 @@ class FirebaseAuthManager {
             val user = authResult.user?.toUser()
 
             if (user != null) {
-                _currentUser.value = user
                 Log.d(TAG, "Sign in successful: ${user.displayName}")
                 Result.success(user)
             } else {
@@ -187,14 +164,13 @@ class FirebaseAuthManager {
             auth.signOut()
             val credentialManager = CredentialManager.create(activity)
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
-            _currentUser.value = null
             Log.d(TAG, "Sign out successful")
         } catch (e: Exception) {
             Log.e(TAG, "Sign out error", e)
         }
     }
 
-    fun isLoggedIn(): Boolean = auth.currentUser != null
+    // REMOVED: isLoggedIn() - redundant, use getCurrentUserId() != null
 
     fun getCurrentUserId(): String? = auth.currentUser?.uid
 

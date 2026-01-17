@@ -31,7 +31,14 @@ class MainActivity : ComponentActivity() {
     private val subscriptionManager: SubscriptionManager by inject()
     private val accessManager: AccessManager by inject()
 
-    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        // FIX: Handle permission result
+        if (!isGranted) {
+            Toast.makeText(this, "Microphone permission is required for recording", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +54,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun initKoin() {
-        try { startKoin { androidLogger(); androidContext(this@MainActivity); modules(appModule, platformModule) } } catch (_: Exception) {}
+        try {
+            startKoin {
+                androidLogger()
+                androidContext(this@MainActivity)
+                modules(appModule, platformModule)
+            }
+        } catch (_: Exception) {
+            // Koin already started
+        }
     }
 
     private fun initAuth() {
@@ -60,7 +75,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestMicPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
@@ -70,17 +86,17 @@ class MainActivity : ComponentActivity() {
         val viewModel: MainViewModel = koinViewModel()
         val accessState by accessManager.accessState.collectAsState()
 
-        // Sync state
         LaunchedEffect(accessState) {
             viewModel.setAuth(accessState.isLoggedIn, accessState.isPro, accessState.freeTrialsRemaining)
         }
 
-        // Track usage
         LaunchedEffect(viewModel) {
             viewModel.onTranscriptionComplete = { seconds ->
                 lifecycleScope.launch { accessManager.recordTranscriptionUsage(seconds) }
             }
         }
+
+        // TODO: Handle accessState.deviceConflict == true with device switch dialog
 
         MainScreen(
             viewModel = viewModel,
@@ -93,13 +109,16 @@ class MainActivity : ComponentActivity() {
 
     private fun signIn() {
         lifecycleScope.launch {
-            authManager.signInWithGoogle(this@MainActivity).onSuccess { user ->
-                subscriptionManager.loginWithFirebaseUser(user.id)
-                accessManager.onUserLoggedIn()
-                Toast.makeText(this@MainActivity, "Welcome!", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(this@MainActivity, "Sign in failed", Toast.LENGTH_SHORT).show()
-            }
+            authManager.signInWithGoogle(this@MainActivity)
+                .onSuccess { user ->
+                    subscriptionManager.loginWithFirebaseUser(user.id)
+                    accessManager.onUserLoggedIn()
+                    Toast.makeText(this@MainActivity, "Welcome!", Toast.LENGTH_SHORT).show()
+                }
+                .onFailure { error ->
+                    // FIX: Show actual error message
+                    Toast.makeText(this@MainActivity, "Sign in failed: ${error.message}", Toast.LENGTH_LONG).show()
+                }
         }
     }
 
