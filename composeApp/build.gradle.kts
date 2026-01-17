@@ -45,6 +45,7 @@ kotlin {
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.auth.ktx)
             implementation(libs.play.services.auth)
+            implementation(libs.firebase.firestore.ktx)
 
             // RevenueCat
             implementation(libs.revenuecat.purchases)

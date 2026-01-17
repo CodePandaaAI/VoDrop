@@ -1,7 +1,6 @@
 package com.liftley.vodrop
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -10,14 +9,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.liftley.vodrop.auth.AccessManager
+import com.liftley.vodrop.auth.AuthConfig
 import com.liftley.vodrop.auth.FirebaseAuthManager
 import com.liftley.vodrop.auth.SubscriptionManager
-import com.liftley.vodrop.data.preferences.PreferencesManager
 import com.liftley.vodrop.di.appModule
 import com.liftley.vodrop.di.platformModule
 import com.liftley.vodrop.ui.main.MainScreen
 import com.liftley.vodrop.ui.main.MainViewModel
-import com.liftley.vodrop.ui.onboarding.OnboardingScreen
 import com.liftley.vodrop.ui.theme.VoDropTheme
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -28,153 +27,91 @@ import org.koin.core.context.GlobalContext.startKoin
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var authManager: FirebaseAuthManager
-    private lateinit var subscriptionManager: SubscriptionManager
-    private val preferencesManager: PreferencesManager by inject()
+    private val authManager: FirebaseAuthManager by inject()
+    private val subscriptionManager: SubscriptionManager by inject()
+    private val accessManager: AccessManager by inject()
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted) {
-            Toast.makeText(
-                this,
-                "Microphone permission is required for voice recording",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
+    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Initialize Koin
-        try {
-            startKoin {
-                androidLogger()
-                androidContext(this@MainActivity)
-                modules(appModule, platformModule)
-            }
-        } catch (_: Exception) {
-            // Koin already started
-        }
-
-        checkMicrophonePermission()
-
-        // Initialize Auth
-        authManager = FirebaseAuthManager()
-        authManager.initialize("808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com")
-
-        // Initialize Subscriptions
-        subscriptionManager = SubscriptionManager(this)
-        subscriptionManager.initialize(authManager.getCurrentUserId())
-
-        lifecycleScope.launch {
-            subscriptionManager.checkProStatus()
-            subscriptionManager.fetchPackages()
-        }
+        initKoin()
+        initAuth()
+        requestMicPermission()
 
         setContent {
             VoDropTheme {
-                var showOnboarding by remember {
-                    mutableStateOf(!preferencesManager.hasCompletedOnboarding())
-                }
-
-                if (showOnboarding) {
-                    OnboardingScreen(
-                        onComplete = { name, style ->
-                            lifecycleScope.launch {
-                                preferencesManager.setUserName(name)
-                                preferencesManager.setCleanupStyle(style)
-                                preferencesManager.completeOnboarding()
-                                showOnboarding = false
-                            }
-                        }
-                    )
-                } else {
-                    MainAppContent()
-                }
+                App()
             }
+        }
+    }
+
+    private fun initKoin() {
+        try { startKoin { androidLogger(); androidContext(this@MainActivity); modules(appModule, platformModule) } } catch (_: Exception) {}
+    }
+
+    private fun initAuth() {
+        authManager.initialize("808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com")
+        subscriptionManager.initialize(authManager.getCurrentUserId())
+        lifecycleScope.launch {
+            subscriptionManager.checkProStatus()
+            accessManager.initialize()
+        }
+    }
+
+    private fun requestMicPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
     @Composable
-    private fun MainAppContent() {
+    private fun App() {
         val viewModel: MainViewModel = koinViewModel()
+        val accessState by accessManager.accessState.collectAsState()
 
-        // ✅ FIX: Only run once when first composed, not on every recomposition
-        LaunchedEffect(Unit) {
-            // TESTING: Force Pro status
-            viewModel.setProStatus(true)
-            viewModel.setUserInfo(
-                isLoggedIn = true,
-                name = "Test User",
-                email = "test@vodrop.com",
-                photoUrl = null
-            )
+        // Sync state
+        LaunchedEffect(accessState) {
+            viewModel.setAuth(accessState.isLoggedIn, accessState.isPro, accessState.freeTrialsRemaining)
+        }
+
+        // Track usage
+        LaunchedEffect(viewModel) {
+            viewModel.onTranscriptionComplete = { seconds ->
+                lifecycleScope.launch { accessManager.recordTranscriptionUsage(seconds) }
+            }
         }
 
         MainScreen(
             viewModel = viewModel,
-            onLoginClick = {
-                lifecycleScope.launch {
-                    val result = authManager.signInWithGoogle(this@MainActivity)
-                    if (result.isSuccess) {
-                        val user = result.getOrNull()
-                        if (user != null) {
-                            subscriptionManager.loginWithFirebaseUser(user.id)
-                            viewModel.setUserInfo(true, user.displayName, user.email, user.photoUrl)
-                            Toast.makeText(this@MainActivity, "Welcome, ${user.displayName}!", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        Toast.makeText(this@MainActivity, result.exceptionOrNull()?.message ?: "Sign in failed", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
-            onSignOut = {
-                lifecycleScope.launch {
-                    authManager.signOut(this@MainActivity)
-                    subscriptionManager.logout()
-                    viewModel.setUserInfo(false, null, null, null)
-                    Toast.makeText(this@MainActivity, "Signed out", Toast.LENGTH_SHORT).show()
-                }
-            },
-            onPurchaseMonthly = {
-                lifecycleScope.launch {
-                    subscriptionManager.purchaseMonthly(this@MainActivity)
-                }
-            },
-            onPurchaseYearly = {
-                lifecycleScope.launch {
-                    subscriptionManager.purchaseYearly(this@MainActivity)
-                }
-            },
-            onRestorePurchases = {
-                lifecycleScope.launch {
-                    val restored = subscriptionManager.restorePurchases()
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (restored) "Purchases restored!" else "No purchases found",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            },
-            monthlyPrice = subscriptionManager.getMonthlyPrice(),
-            yearlyPrice = subscriptionManager.getYearlyPrice()
+            onLoginClick = { signIn() },
+            onSignOut = { signOut() },
+            onPurchaseMonthly = { purchase() },
+            monthlyPrice = AuthConfig.PRICE_MONTHLY_USD
         )
     }
 
-    private fun checkMicrophonePermission() {
-        when {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> {
-                // Permission already granted
-            }
-            shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> {
-                Toast.makeText(this, "VoDrop needs microphone access to record your voice", Toast.LENGTH_LONG).show()
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    private fun signIn() {
+        lifecycleScope.launch {
+            authManager.signInWithGoogle(this@MainActivity).onSuccess { user ->
+                subscriptionManager.loginWithFirebaseUser(user.id)
+                accessManager.onUserLoggedIn()
+                Toast.makeText(this@MainActivity, "Welcome!", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@MainActivity, "Sign in failed", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun signOut() {
+        lifecycleScope.launch {
+            authManager.signOut(this@MainActivity)
+            subscriptionManager.logout()
+            accessManager.onUserLoggedOut()
+        }
+    }
+
+    private fun purchase() {
+        lifecycleScope.launch { subscriptionManager.purchaseMonthly(this@MainActivity) }
     }
 }

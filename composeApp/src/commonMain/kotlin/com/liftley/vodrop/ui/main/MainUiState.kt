@@ -1,25 +1,16 @@
 package com.liftley.vodrop.ui.main
 
-import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.stt.TranscriptionState
 import com.liftley.vodrop.domain.model.Transcription
 
-/** Recording phases */
 enum class RecordingPhase { IDLE, READY, LISTENING, PROCESSING }
 
-/** Transcription modes */
-enum class TranscriptionMode(
-    val displayName: String,
-    val emoji: String,
-    val description: String  // Add this back
-) {
-    STANDARD("Standard", "🎤", "Cloud transcription only"),
-    WITH_AI_POLISH("AI Polish", "✨", "Cloud transcription + Gemini cleanup");
-
+enum class TranscriptionMode(val displayName: String) {
+    STANDARD("Standard"),
+    WITH_AI_POLISH("AI Polish");
     companion object { val DEFAULT = STANDARD }
 }
 
-/** Main UI state */
 data class MainUiState(
     // Recording
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
@@ -31,24 +22,29 @@ data class MainUiState(
     // History
     val history: List<Transcription> = emptyList(),
 
+    // Mode
+    val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,
+    val showModeSheet: Boolean = false,
+
     // Dialogs
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
-    val showModeSheet: Boolean = false,
-    val showSettings: Boolean = false,
-    val showProfileDialog: Boolean = false,
     val showUpgradeDialog: Boolean = false,
-    val showLoginPrompt: Boolean = false,
 
-    // Settings
-    val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,
-    val cleanupStyle: CleanupStyle = CleanupStyle.DEFAULT,
-
-    // User (testing defaults)
-    val isPro: Boolean = true,
-    val isLoggedIn: Boolean = true,
-    val userName: String = "",
+    // User
+    val isLoggedIn: Boolean = false,
+    val isPro: Boolean = false,
+    val freeTrialsRemaining: Int = 3,
 
     // AI improvement
     val improvingId: Long? = null
-)
+) {
+    val canTranscribe: Boolean get() = isLoggedIn && (isPro || freeTrialsRemaining > 0)
+
+    val statusText: String get() = when {
+        !isLoggedIn -> "Sign in to start"
+        isPro -> "Pro • Unlimited"
+        freeTrialsRemaining > 0 -> "$freeTrialsRemaining trials left"
+        else -> "Upgrade to Pro"
+    }
+}

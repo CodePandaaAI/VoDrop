@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 private const val TAG = "SubscriptionManager"
 
 /**
- * Manages subscriptions via RevenueCat
+ * Manages subscriptions via RevenueCat (v1: Monthly only)
  */
 class SubscriptionManager(private val context: Context) {
 
@@ -33,7 +33,6 @@ class SubscriptionManager(private val context: Context) {
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private var monthlyPackage: Package? = null
-    private var yearlyPackage: Package? = null
 
     /**
      * Initialize RevenueCat SDK
@@ -85,45 +84,30 @@ class SubscriptionManager(private val context: Context) {
         try {
             val offerings = Purchases.sharedInstance.awaitOfferings()
             val currentOffering = offerings.current
-
             monthlyPackage = currentOffering?.monthly
-            yearlyPackage = currentOffering?.annual
-
             Log.d(TAG, "Monthly package: ${monthlyPackage?.identifier}")
-            Log.d(TAG, "Yearly package: ${yearlyPackage?.identifier}")
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching packages", e)
         }
     }
 
     /**
-     * Get formatted prices
+     * Get formatted monthly price
      */
     fun getMonthlyPrice(): String {
-        return monthlyPackage?.product?.price?.formatted ?: "₹129/month"
-    }
-
-    fun getYearlyPrice(): String {
-        return yearlyPackage?.product?.price?.formatted ?: "₹999/year"
+        return monthlyPackage?.product?.price?.formatted ?: AuthConfig.PRICE_MONTHLY_USD
     }
 
     /**
      * Purchase monthly subscription
      */
     suspend fun purchaseMonthly(activity: Activity): Boolean {
-        val pkg = monthlyPackage ?: return false
-        return purchase(activity, pkg)
-    }
+        val pkg = monthlyPackage
+        if (pkg == null) {
+            Log.e(TAG, "Monthly package not available")
+            return false
+        }
 
-    /**
-     * Purchase yearly subscription
-     */
-    suspend fun purchaseYearly(activity: Activity): Boolean {
-        val pkg = yearlyPackage ?: return false
-        return purchase(activity, pkg)
-    }
-
-    private suspend fun purchase(activity: Activity, pkg: Package): Boolean {
         return try {
             val params = PurchaseParams.Builder(activity, pkg).build()
             val result = Purchases.sharedInstance.awaitPurchase(params)

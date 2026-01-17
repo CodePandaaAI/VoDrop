@@ -29,6 +29,7 @@ credentials = "1.5.0"
 
 
 [libraries]
+firebase-firestore-ktx = { module = "com.google.firebase:firebase-firestore-ktx" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
