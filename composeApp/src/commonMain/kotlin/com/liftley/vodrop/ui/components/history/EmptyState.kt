@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Empty state placeholder when no transcriptions exist
- * Material 3 Expressive: Bigger icon, bolder text, more spacing
+ * Material 3 Expressive: Bigger icon, bolder text, generous spacing
  */
 @Composable
 fun EmptyState(
@@ -24,31 +24,42 @@ fun EmptyState(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(64.dp), // Material 3 Expressive: More padding
+            .padding(vertical = 80.dp, horizontal = 32.dp), // Better vertical breathing room
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            // Large icon with subtle color
             Icon(
                 imageVector = Icons.Rounded.Mic,
                 contentDescription = null,
-                modifier = Modifier.size(96.dp), // Material 3 Expressive: Bigger icon
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                modifier = Modifier.size(120.dp), // Even bigger for prominence
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) // Slightly more subtle
             )
-            Spacer(modifier = Modifier.height(32.dp)) // More spacing
+
+            Spacer(modifier = Modifier.height(40.dp)) // Generous spacing
+
+            // Primary message - Bold & Clear
             Text(
-                text = "No transcriptions yet",
-                style = MaterialTheme.typography.headlineSmall, // Material 3 Expressive: Bigger
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "No Drops Yet",
+                style = MaterialTheme.typography.headlineMedium, // Bigger for M3 Expressive
+                fontWeight = FontWeight.ExtraBold, // Extra bold for emphasis
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp)) // More spacing
+
+            Spacer(modifier = Modifier.height(16.dp)) // Good spacing
+
+            // Secondary message - Softer & Instructional
             Text(
-                text = "Tap the microphone above to start recording",
-                style = MaterialTheme.typography.bodyLarge, // Material 3 Expressive: Bigger
+                text = "Tap the microphone to start\nyour first transcription",
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center,
+                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.4f // Better readability
             )
         }
     }

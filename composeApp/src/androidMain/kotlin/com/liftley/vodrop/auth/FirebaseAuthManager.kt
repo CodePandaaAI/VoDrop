@@ -22,16 +22,6 @@ import java.util.UUID
 private const val TAG = "FirebaseAuthManager"
 
 /**
- * User data model
- */
-data class User(
-    val id: String,
-    val email: String?,
-    val displayName: String?,
-    val photoUrl: String?
-)
-
-/**
  * Handles Firebase Authentication with Google Sign-In via Credential Manager.
  */
 class FirebaseAuthManager {
