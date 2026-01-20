@@ -19,6 +19,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.liftley.vodrop.data.firestore.DeviceManager
 import com.liftley.vodrop.data.firestore.FirestoreManager
+import com.liftley.vodrop.data.firestore.UserData
 import com.revenuecat.purchases.CustomerInfo
 import com.revenuecat.purchases.LogLevel
 import com.revenuecat.purchases.Package
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 import java.util.UUID
 
@@ -87,7 +89,6 @@ actual class PlatformAuth(
             updateAccessStateFromRevenueCat(info)
         }
     }
-
     /** Call this after Koin setup to load user state */
     suspend fun initializeAccess() {
         _accessState.value = _accessState.value.copy(isLoading = true)
@@ -108,22 +109,26 @@ actual class PlatformAuth(
             false
         }
 
-        // Load user data from Firestore
+        // Load user data from Firestore (may fail if database doesn't exist)
         val deviceId = deviceManager.getDeviceId()
-        val userData = firestoreManager.getOrCreateUserData(deviceId)
-
-        _accessState.value = if (userData != null) {
-            AccessState(
-                isLoading = false,
-                isLoggedIn = true,
-                isPro = isPro,
-                freeTrialsRemaining = userData.freeTrialsRemaining,
-                usedMinutesThisMonth = userData.getUsedMinutes(),
-                remainingMinutesThisMonth = userData.getRemainingMinutes()
-            )
-        } else {
-            AccessState(isLoading = false, isLoggedIn = true, isPro = isPro)
+        val userData: UserData? = try {
+            withTimeoutOrNull(15000) {  // 5 second timeout
+                firestoreManager.getOrCreateUserData(deviceId)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firestore error: ${e.message}")
+            null
         }
+
+        // UPDATE STATE EVEN IF FIRESTORE FAILS
+        _accessState.value = AccessState(
+            isLoading = false,
+            isLoggedIn = true,  // ← Always set to true since auth.currentUser exists
+            isPro = isPro,
+            freeTrialsRemaining = userData?.freeTrialsRemaining ?: 3,
+            usedMinutesThisMonth = userData?.getUsedMinutes() ?: 0,
+            remainingMinutesThisMonth = userData?.getRemainingMinutes() ?: 120
+        )
 
         Log.d(TAG, "✅ Initialized: ${_accessState.value}")
     }

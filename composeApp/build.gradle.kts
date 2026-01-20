@@ -50,11 +50,13 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
+
             // Firebase Auth
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.auth.ktx)
             implementation(libs.play.services.auth)
             implementation(libs.firebase.firestore.ktx)
+            implementation(libs.firebase.functions.ktx)
 
             // RevenueCat
             implementation(libs.revenuecat.purchases)
@@ -93,7 +95,6 @@ kotlin {
             implementation(libs.sqldelight.sqlite.driver)
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
-            implementation(libs.whisper.jni)
             implementation(libs.ktor.client.okhttp)
         }
 

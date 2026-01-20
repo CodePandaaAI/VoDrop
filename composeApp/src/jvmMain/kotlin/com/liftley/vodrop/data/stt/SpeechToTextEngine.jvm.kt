@@ -1,207 +1,105 @@
 package com.liftley.vodrop.data.stt
 
-import io.github.givimad.whisperjni.WhisperContext
-import io.github.givimad.whisperjni.WhisperFullParams
-import io.github.givimad.whisperjni.WhisperJNI
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.utils.io.*
+import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileOutputStream
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Model configuration for Desktop (offline)
+ * JVM Speech-to-Text engine using Firebase Cloud Functions.
+ * Cloud-only - no offline capability.
  */
-private object DesktopModelConfig {
-    const val MODEL_NAME = "ggml-base-q5_1.bin"
-    const val MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin"
-    const val MODEL_SIZE = 57_000_000L
-}
-
-/**
- * Desktop (JVM) Speech-to-Text engine using WhisperJNI
- * Keeps offline capability for Desktop where it works great
- */
-class JvmSpeechToTextEngine : SpeechToTextEngine {
+class JvmSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
     private val _state = MutableStateFlow<TranscriptionState>(TranscriptionState.NotReady)
     override val state: StateFlow<TranscriptionState> = _state.asStateFlow()
 
-    private var whisperContext: WhisperContext? = null
-    private val whisperJNI = WhisperJNI()
-
-    private val httpClient = HttpClient(OkHttp)
-
-    private val modelDirectory: File by lazy {
-        val userHome = System.getProperty("user.home")
-        File(userHome, ".vodrop/models").apply { mkdirs() }
-    }
-
-    private val modelFile: File
-        get() = File(modelDirectory, DesktopModelConfig.MODEL_NAME)
-
-    init {
-        WhisperJNI.loadLibrary()
-    }
+    private val firebaseFunctions: FirebaseFunctionsService by inject()
 
     override suspend fun initialize() {
-        withContext(Dispatchers.IO) {
-            try {
-                // Clean up temp files
-                modelDirectory.listFiles()?.filter { it.name.endsWith(".tmp") }?.forEach {
-                    it.delete()
-                }
-
-                // Download model if needed
-                if (!modelFile.exists() || modelFile.length() < DesktopModelConfig.MODEL_SIZE * 0.9) {
-                    downloadModel()
-                }
-
-                // Load model
-                _state.value = TranscriptionState.Initializing("Loading model...")
-
-                whisperContext?.close()
-                whisperContext = whisperJNI.init(modelFile.toPath())
-
-                if (whisperContext == null) {
-                    throw SpeechToTextException("Failed to initialize Whisper context")
-                }
-
-                _state.value = TranscriptionState.Ready
-                println("✅ Desktop Whisper model loaded")
-
-            } catch (e: Exception) {
-                val error = "Failed to initialize: ${e.message}"
-                _state.value = TranscriptionState.Error(error)
-                throw SpeechToTextException(error, e)
-            }
-        }
-    }
-
-    private suspend fun downloadModel() {
-        _state.value = TranscriptionState.Downloading(0f)
-
-        try {
-            modelFile.parentFile?.mkdirs()
-            val tempFile = File(modelFile.parent, "${modelFile.name}.tmp")
-
-            httpClient.prepareGet(DesktopModelConfig.MODEL_URL).execute { response ->
-                if (!response.status.isSuccess()) {
-                    throw SpeechToTextException("Download failed: HTTP ${response.status.value}")
-                }
-
-                val contentLength = response.contentLength() ?: DesktopModelConfig.MODEL_SIZE
-                val channel: ByteReadChannel = response.bodyAsChannel()
-
-                var downloaded = 0L
-                val buffer = ByteArray(8192)
-
-                FileOutputStream(tempFile).use { output ->
-                    while (!channel.isClosedForRead) {
-                        val bytesRead = channel.readAvailable(buffer)
-                        if (bytesRead > 0) {
-                            output.write(buffer, 0, bytesRead)
-                            downloaded += bytesRead
-                            val progress = (downloaded.toFloat() / contentLength).coerceIn(0f, 1f)
-                            _state.value = TranscriptionState.Downloading(progress)
-                        }
-                    }
-                    output.flush()
-                }
-            }
-
-            if (!tempFile.renameTo(modelFile)) {
-                tempFile.delete()
-                throw SpeechToTextException("Failed to save model file")
-            }
-
-        } catch (e: SpeechToTextException) {
-            throw e
-        } catch (e: Exception) {
-            throw SpeechToTextException("Download failed: ${e.message}", e)
-        }
+        println("[JvmSTT] Cloud engine initialized")
+        _state.value = TranscriptionState.Ready
     }
 
     override fun isReady(): Boolean = _state.value is TranscriptionState.Ready
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
-        val context = whisperContext
-        if (context == null || !isReady()) {
-            return TranscriptionResult.Error("Model not loaded")
+        if (audioData.isEmpty()) {
+            return TranscriptionResult.Error("No audio data provided")
         }
 
-        return withContext(Dispatchers.Default) {
+        return withContext(Dispatchers.IO) {
             try {
                 _state.value = TranscriptionState.Transcribing
-                val startTime = System.currentTimeMillis()
+                println("[JvmSTT] Sending ${audioData.size} bytes to Firebase...")
 
-                val samples = convertBytesToFloatSamples(audioData)
+                val wavData = createWavFile(audioData)
+                val result = firebaseFunctions.transcribe(wavData)
 
-                val params = WhisperFullParams().apply {
-                    language = "en"
-                    translate = false
-                    noContext = true
-                    singleSegment = false
-                    printProgress = false
-                    printTimestamps = false
-                }
-
-                val result = whisperJNI.full(context, params, samples, samples.size)
-                if (result != 0) {
-                    _state.value = TranscriptionState.Ready
-                    return@withContext TranscriptionResult.Error("Transcription failed with code: $result")
-                }
-
-                val numSegments = whisperJNI.fullNSegments(context)
-                val text = StringBuilder()
-                for (i in 0 until numSegments) {
-                    text.append(whisperJNI.fullGetSegmentText(context, i))
-                }
-
-                val durationMs = System.currentTimeMillis() - startTime
                 _state.value = TranscriptionState.Ready
 
-                // Apply basic cleanup
-                val cleanedText = RuleBasedTextCleanup.cleanup(text.toString().trim())
-
-                TranscriptionResult.Success(
-                    text = cleanedText,
-                    durationMs = durationMs
+                result.fold(
+                    onSuccess = { text ->
+                        println("[JvmSTT] Transcription complete: ${text.take(50)}...")
+                        val cleanedText = RuleBasedTextCleanup.cleanup(text)
+                        TranscriptionResult.Success(cleanedText, 0L)
+                    },
+                    onFailure = { error ->
+                        println("[JvmSTT] Error: ${error.message}")
+                        TranscriptionResult.Error(error.message ?: "Transcription failed")
+                    }
                 )
             } catch (e: Exception) {
-                _state.value = TranscriptionState.Ready
-                TranscriptionResult.Error("Transcription error: ${e.message}")
+                println("[JvmSTT] Exception: ${e.message}")
+                _state.value = TranscriptionState.Error(e.message ?: "Unknown error")
+                TranscriptionResult.Error("Transcription failed: ${e.message}")
             }
         }
     }
 
-    private fun convertBytesToFloatSamples(audioData: ByteArray): FloatArray {
-        val shortBuffer = ByteBuffer.wrap(audioData)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .asShortBuffer()
-
-        val samples = FloatArray(shortBuffer.remaining())
-        for (i in samples.indices) {
-            samples[i] = shortBuffer.get() / 32768.0f
-        }
-        return samples
+    override fun release() {
+        println("[JvmSTT] Releasing resources")
+        _state.value = TranscriptionState.NotReady
     }
 
-    override fun release() {
-        whisperContext?.close()
-        whisperContext = null
-        httpClient.close()
-        _state.value = TranscriptionState.NotReady
+    private fun createWavFile(pcmData: ByteArray): ByteArray {
+        val sampleRate = 16000
+        val channels = 1
+        val bitsPerSample = 16
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val dataSize = pcmData.size
+        val fileSize = 36 + dataSize
+
+        val buffer = ByteBuffer.allocate(44 + pcmData.size).order(ByteOrder.LITTLE_ENDIAN)
+
+        // RIFF header
+        buffer.put("RIFF".toByteArray())
+        buffer.putInt(fileSize)
+        buffer.put("WAVE".toByteArray())
+
+        // fmt chunk
+        buffer.put("fmt ".toByteArray())
+        buffer.putInt(16) // Subchunk1 size
+        buffer.putShort(1) // Audio format (PCM)
+        buffer.putShort(channels.toShort())
+        buffer.putInt(sampleRate)
+        buffer.putInt(byteRate)
+        buffer.putShort(blockAlign.toShort())
+        buffer.putShort(bitsPerSample.toShort())
+
+        // data chunk
+        buffer.put("data".toByteArray())
+        buffer.putInt(dataSize)
+        buffer.put(pcmData)
+
+        return buffer.array()
     }
 }
 

@@ -1,44 +1,43 @@
 {
   "project_info": {
-    "project_number": "808998462431",
-    "project_id": "vodrop-liftley",
-    "storage_bucket": "vodrop-liftley.firebasestorage.app"
+    "project_number": "691826016849",
+    "project_id": "post-3424f",
+    "storage_bucket": "post-3424f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:808998462431:android:04eb811420f33b7535da6a",
+        "mobilesdk_app_id": "1:691826016849:android:d2e9e625e08390f4322e70",
         "android_client_info": {
           "package_name": "com.liftley.vodrop"
         }
       },
       "oauth_client": [
         {
-          "client_id": "808998462431-vlg7e4m6vrqq0rfa0sf7lf077uv64itd.apps.googleusercontent.com",
+          "client_id": "691826016849-a7nngdmvv10s09ek759l2s0a4ekmk4n8.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.liftley.vodrop",
-            "certificate_hash": "23f87828ace95ba64fc124fa3c886ae0bb4f2b0b"
+            "certificate_hash": "e8296c26bb9c9be236bfdec256853c717a2c70b1"
           }
         },
         {
-          "client_id": "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com",
-          "client_type": 3
+          "client_id": "691826016849-h33kd8vcpffufj4a3fjmuju648l3ln9a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.liftley.vodrop",
+            "certificate_hash": "d999779f57d35f797d85e679f3745b4b0c8fe41f"
+          }
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyCg03Vm2kJexKb_AfBXfk4KSnIe5vkNQsU"
+          "current_key": "AIzaSyComrmF0gWTZTsVNU7c60ZlnvBtfCz01vc"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

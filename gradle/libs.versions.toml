@@ -64,9 +64,6 @@ compose-material3 = { module = "org.jetbrains.compose.material3:material3", vers
 
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
 
-# WhisperJNI for Desktop
-whisper-jni = { module = "io.github.givimad:whisper-jni", version.ref = "whisper-jni" }
-
 # Ktor for model downloading
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
@@ -76,6 +73,7 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+firebase-functions-ktx = { module = "com.google.firebase:firebase-functions-ktx" }
 
 # Credential Manager (new Google Sign-In)
 credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }

@@ -15,10 +15,7 @@ actual class PlatformAuth {
         freeTrialsRemaining = 999
     ))
 
-    private val _isPro = MutableStateFlow(true)
-
     actual val accessState: StateFlow<AccessState> = _accessState
-    actual val isPro: StateFlow<Boolean> = _isPro
 
     actual fun initialize() {
         // No-op on desktop
@@ -36,9 +33,5 @@ actual class PlatformAuth {
 
     actual suspend fun recordUsage(durationSeconds: Long) {
         // No-op on desktop (unlimited)
-    }
-
-    actual suspend fun updateProStatus(isPro: Boolean) {
-        _isPro.value = isPro
     }
 }

@@ -1,13 +1,12 @@
 package com.liftley.vodrop.di
 
 import com.liftley.vodrop.auth.PlatformAuth
+import com.liftley.vodrop.data.firebase.AndroidFirebaseFunctionsService
+import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import com.liftley.vodrop.data.firestore.DeviceManager
 import com.liftley.vodrop.data.firestore.FirestoreManager
-import com.liftley.vodrop.data.llm.GeminiCleanupService
-import com.liftley.vodrop.data.llm.LLMConfig
+import com.liftley.vodrop.data.llm.FirebaseTextCleanupService
 import com.liftley.vodrop.data.llm.TextCleanupService
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -20,12 +19,12 @@ val platformModule = module {
     single { FirestoreManager() }
     single { DeviceManager(androidContext()) }
 
-    // PlatformAuth - SINGLE auth class (consolidated)
+    // Firebase Functions (NEW - replaces direct API calls)
+    single<FirebaseFunctionsService> { AndroidFirebaseFunctionsService() }
+
+    // PlatformAuth
     single { PlatformAuth(androidContext(), get(), get()) }
 
-    // Text cleanup
-    single<TextCleanupService> { GeminiCleanupService(LLMConfig.GEMINI_API_KEY) }
-
-    // HTTP Client
-    single { HttpClient(OkHttp) }
+    // Text cleanup (uses Firebase now)
+    single<TextCleanupService> { FirebaseTextCleanupService(get()) }
 }

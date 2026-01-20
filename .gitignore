@@ -1,19 +1,39 @@
+# IDE
 *.iml
 .kotlin
 .gradle
-**/build/
-xcuserdata
-!src/**/build/
-local.properties
 .idea
 .DS_Store
+
+# Build output
+**/build/
+!src/**/build/
+
+# Local config
+local.properties
 captures
+
+# Native
 .externalNativeBuild
 .cxx
+
+# iOS
+xcuserdata
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
 !*.xcodeproj/project.xcworkspace/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
+
+# Node/Functions
 node_modules/
+functions/lib/
+
+# Sensitive - IMPORTANT!
+composeApp/google-services.json
+
+# Built artifacts
+*.apk
+*.aab
+*.log

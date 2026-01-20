@@ -39,5 +39,5 @@ object AuthConfig {
     /** Pro plan monthly limit in minutes */
     const val PRO_MONTHLY_MINUTES = 120
 
-    const val WEB_CLIENT_ID = "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com"
+    const val WEB_CLIENT_ID = "691826016849-c65lo4pg65gblmsh1cp6p86r36ltm2ea.apps.googleusercontent.com"
 }
