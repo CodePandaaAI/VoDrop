@@ -29,7 +29,6 @@ fun MainScreen(
     val state by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboardManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
 
     // Sync drawer with ViewModel
     LaunchedEffect(state.isDrawerOpen) { if (state.isDrawerOpen) drawerState.open() else drawerState.close() }
@@ -66,11 +65,19 @@ fun MainScreen(
                                 if (state.isPro) viewModel.selectMode(if (state.transcriptionMode == TranscriptionMode.STANDARD) TranscriptionMode.WITH_AI_POLISH else TranscriptionMode.STANDARD)
                                 else viewModel.showUpgradeDialog()
                             },
-                            label = { Text(state.transcriptionMode.displayName, fontWeight = FontWeight.Bold) },
+                            label = {
+                                Text(
+                                    state.transcriptionMode.displayName,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
                             enabled = state.isLoggedIn,
                             shape = MaterialTheme.shapes.extraLarge,
                             border = null,
-                            colors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface, selectedContainerColor = MaterialTheme.colorScheme.primaryContainer),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
                             modifier = Modifier.height(48.dp).padding(end = 8.dp)
                         )
                     }
@@ -98,9 +105,23 @@ fun MainScreen(
                 if (state.history.isEmpty()) {
                     item { EmptyState() }
                 } else {
-                    item { Text("Recent Drops", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+                    item {
+                        Text(
+                            "Recent Drops",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     items(state.history, key = { it.id }) { item ->
-                        HistoryCard(item, state.isPro, state.improvingId == item.id, { viewModel.startEdit(item) }, { viewModel.requestDelete(item.id) }, { viewModel.onImproveWithAI(item) })
+                        HistoryCard(
+                            transcription = item,
+                            isPro = state.isPro,
+                            isImproving = state.improvingId == item.id,
+                            onCopy = { clipboard.setText(AnnotatedString(item.text)) },
+                            onEdit = { viewModel.startEdit(item) },
+                            onDelete = { viewModel.requestDelete(item.id) },
+                            onImproveWithAI = { viewModel.onImproveWithAI(item) }
+                        )
                     }
                 }
             }
@@ -113,7 +134,12 @@ fun MainScreen(
             onDismissRequest = viewModel::cancelDelete,
             title = { Text("Delete?", fontWeight = FontWeight.Bold) },
             text = { Text("This cannot be undone.") },
-            confirmButton = { Button(onClick = viewModel::confirmDelete, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmDelete,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
             dismissButton = { TextButton(onClick = viewModel::cancelDelete) { Text("Cancel") } },
             shape = MaterialTheme.shapes.extraLarge
         )
@@ -123,7 +149,14 @@ fun MainScreen(
         AlertDialog(
             onDismissRequest = viewModel::cancelEdit,
             title = { Text("Edit", fontWeight = FontWeight.Bold) },
-            text = { OutlinedTextField(state.editText, viewModel::updateEditText, Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) },
+            text = {
+                OutlinedTextField(
+                    state.editText,
+                    viewModel::updateEditText,
+                    Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large
+                )
+            },
             confirmButton = { Button(onClick = viewModel::saveEdit) { Text("Save") } },
             dismissButton = { TextButton(onClick = viewModel::cancelEdit) { Text("Cancel") } },
             shape = MaterialTheme.shapes.extraLarge
@@ -133,10 +166,27 @@ fun MainScreen(
     if (state.showUpgradeDialog) {
         AlertDialog(
             onDismissRequest = viewModel::hideUpgradeDialog,
-            icon = { Icon(Icons.Default.Person, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary) },
+            icon = {
+                Icon(
+                    Icons.Default.Person,
+                    null,
+                    Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
             title = { Text("Unlock Pro", fontWeight = FontWeight.Bold) },
-            text = { Text("Unlimited transcriptions and AI Polish for $monthlyPrice/month.", textAlign = TextAlign.Center) },
-            confirmButton = { Button(onClick = { viewModel.hideUpgradeDialog(); onPurchaseMonthly() }, Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { Text("Upgrade Now") } },
+            text = {
+                Text(
+                    "Unlimited transcriptions and AI Polish for $monthlyPrice/month.",
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.hideUpgradeDialog(); onPurchaseMonthly() },
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) { Text("Upgrade Now") }
+            },
             dismissButton = { TextButton(onClick = viewModel::hideUpgradeDialog) { Text("Maybe Later") } },
             shape = MaterialTheme.shapes.extraLarge
         )

@@ -144,17 +144,13 @@ actual class PlatformAuth(
         return try {
             val credentialManager = CredentialManager.create(act)
 
-            Log.d(TAG, "Attempting sign-in with authorized accounts first...")
-            val result = tryGetCredential(credentialManager, act, filterByAuthorized = true)
-                ?: run {
-                    Log.d(TAG, "No authorized accounts, trying all accounts...")
-                    tryGetCredential(credentialManager, act, filterByAuthorized = false)
-                }
+            Log.d(TAG, "Starting sign-in with account chooser...")
+            val result = tryGetCredential(credentialManager, act)
 
             if (result != null) {
                 handleSignInResult(result)
             } else {
-                Result.failure(Exception("Could not get Google credentials. Please try again."))
+                Result.failure(Exception("No Google accounts found. Please add a Google account to your device."))
             }
         } catch (e: GetCredentialCancellationException) {
             Log.d(TAG, "Sign in cancelled by user")
@@ -170,16 +166,15 @@ actual class PlatformAuth(
 
     private suspend fun tryGetCredential(
         credentialManager: CredentialManager,
-        activity: Activity,
-        filterByAuthorized: Boolean
+        activity: Activity
     ): GetCredentialResponse? {
         return try {
             val nonce = UUID.randomUUID().toString()
 
             val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(filterByAuthorized)
+                .setFilterByAuthorizedAccounts(false)  // Show ALL accounts
                 .setServerClientId(AuthConfig.WEB_CLIENT_ID)
-                .setAutoSelectEnabled(filterByAuthorized)
+                .setAutoSelectEnabled(false)  // NEVER auto-select - always show chooser
                 .setNonce(nonce)
                 .build()
 
@@ -187,20 +182,16 @@ actual class PlatformAuth(
                 .addCredentialOption(googleIdOption)
                 .build()
 
+            Log.d(TAG, "Showing account chooser...")
             credentialManager.getCredential(context = activity, request = request)
         } catch (e: NoCredentialException) {
-            Log.d(TAG, "No credential found with filterByAuthorized=$filterByAuthorized")
+            Log.d(TAG, "No Google accounts on device")
             null
         } catch (e: GetCredentialCancellationException) {
             throw e
         } catch (e: GetCredentialException) {
             Log.e(TAG, "GetCredentialException: ${e.message}", e)
-            if (!filterByAuthorized) throw e
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Unexpected exception: ${e.message}", e)
-            if (!filterByAuthorized) throw e
-            null
+            throw e
         }
     }
 
