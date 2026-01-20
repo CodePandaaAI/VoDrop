@@ -63,7 +63,8 @@ val appModule = module {
             audioRecorder = get(),
             sttEngine = get(),
             transcribeUseCase = get(),
-            historyUseCase = get()
+            historyUseCase = get(),
+            platformAuth = get()
         )
     }
 }

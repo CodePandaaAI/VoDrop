@@ -16,6 +16,3 @@ interface PreferencesManager {
     suspend fun getPreferences(): UserPreferences
     fun hasCompletedOnboarding(): Boolean
 }
-
-// REMOVED: expect fun createPreferencesManager(): PreferencesManager
-// Using Koin DI instead: single<PreferencesManager> { AndroidPreferencesManager() }

@@ -8,8 +8,6 @@ package com.liftley.vodrop.auth
  * Before public release:
  * - Move to secure backend
  * - Or use BuildConfig with local.properties
- *
- * @see SubscriptionManager for RevenueCat integration
  */
 object AuthConfig {
 
@@ -40,4 +38,6 @@ object AuthConfig {
 
     /** Pro plan monthly limit in minutes */
     const val PRO_MONTHLY_MINUTES = 120
+
+    const val WEB_CLIENT_ID = "808998462431-v1mec4tnrgbosfkskedeb4kouodb8qm6.apps.googleusercontent.com"
 }

@@ -2,6 +2,7 @@ package com.liftley.vodrop.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.liftley.vodrop.auth.PlatformAuth
 import com.liftley.vodrop.data.audio.*
 import com.liftley.vodrop.data.stt.*
 import com.liftley.vodrop.domain.model.Transcription
@@ -13,12 +14,12 @@ class MainViewModel(
     private val audioRecorder: AudioRecorder,
     private val sttEngine: SpeechToTextEngine,
     private val transcribeUseCase: TranscribeAudioUseCase,
-    private val historyUseCase: ManageHistoryUseCase
+    private val historyUseCase: ManageHistoryUseCase,
+    private val platformAuth: PlatformAuth
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
-    var onTranscriptionComplete: ((Long) -> Unit)? = null
 
     init {
         observeEngineState()
@@ -64,7 +65,7 @@ class MainViewModel(
                     is TranscribeAudioUseCase.Result.Success -> {
                         update { copy(currentTranscription = result.text, recordingPhase = RecordingPhase.READY, progressMessage = "") }
                         historyUseCase.saveTranscription(result.text)
-                        onTranscriptionComplete?.invoke(duration.toLong())
+                        viewModelScope.launch { platformAuth.recordUsage(duration.toLong()) }
                     }
                     is TranscribeAudioUseCase.Result.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
                 }

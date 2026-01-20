@@ -4,17 +4,15 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Platform-specific authentication and subscription operations.
+ * Single source of truth for all auth state.
  *
  * Android: Firebase + RevenueCat + Firestore
  * JVM: Stub (no auth in desktop version)
  */
 expect class PlatformAuth {
 
-    /** Current access state (login, pro, trials) */
+    /** Current access state (login, pro, trials, usage) - SINGLE SOURCE OF TRUTH */
     val accessState: StateFlow<AccessState>
-
-    /** Pro subscription status from RevenueCat */
-    val isPro: StateFlow<Boolean>
 
     /** Initialize auth systems (call once at app start) */
     fun initialize()
@@ -30,7 +28,4 @@ expect class PlatformAuth {
 
     /** Record usage after transcription */
     suspend fun recordUsage(durationSeconds: Long)
-
-    /** Update pro status (called when RevenueCat state changes) */
-    suspend fun updateProStatus(isPro: Boolean)
 }

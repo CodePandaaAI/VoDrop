@@ -21,25 +21,10 @@ fun App() {
     val scope = rememberCoroutineScope()
 
     val accessState by platformAuth.accessState.collectAsState()
-    val isPro by platformAuth.isPro.collectAsState()
 
-    // Sync access state to ViewModel
+    // Single LaunchedEffect - sync access state to ViewModel
     LaunchedEffect(accessState) {
         viewModel.setAuth(accessState.isLoggedIn, accessState.isPro, accessState.freeTrialsRemaining)
-    }
-
-    // Update when Pro status changes
-    LaunchedEffect(isPro) {
-        if (accessState.isLoggedIn) {
-            platformAuth.updateProStatus(isPro)
-        }
-    }
-
-    // Setup transcription callback
-    LaunchedEffect(viewModel) {
-        viewModel.onTranscriptionComplete = { seconds ->
-            scope.launch { platformAuth.recordUsage(seconds) }
-        }
     }
 
     VoDropTheme {
