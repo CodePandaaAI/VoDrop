@@ -1,26 +1,60 @@
 package com.liftley.vodrop
 
+import android.Manifest
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.liftley.vodrop.auth.PlatformAuth
 import com.liftley.vodrop.di.appModule
 import com.liftley.vodrop.di.platformModule
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.GlobalContext.startKoin
 
 class MainActivity : ComponentActivity() {
+
+    private val platformAuth: PlatformAuth by inject()
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) Toast.makeText(this, "Microphone permission required", Toast.LENGTH_LONG).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
 
-        startKoin {
-            androidContext(this@MainActivity)
-            modules(platformModule, appModule)
-        }
+        initKoin()
+        platformAuth.setActivity(this)
+        platformAuth.initialize()
+        requestMicPermission()
 
-        setContent {
-            App()
+        lifecycleScope.launch { platformAuth.initializeAccess() }
+
+        setContent { App() }
+    }
+
+    private fun initKoin() {
+        try {
+            startKoin {
+                androidLogger()
+                androidContext(this@MainActivity)
+                modules(appModule, platformModule)
+            }
+        } catch (_: Exception) { /* Already started */ }
+    }
+
+    private fun requestMicPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 }

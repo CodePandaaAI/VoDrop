@@ -7,6 +7,9 @@ androidx-activity = "1.10.0"
 androidx-appcompat = "1.7.0"
 androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
+firebase-bom = "33.7.0"
+play-services-auth = "21.2.0"
+revenuecat = "8.6.0"
 
 # Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
 androidx-lifecycle = "2.8.4"
@@ -22,9 +25,11 @@ accompanist = "0.36.0"
 kotlinx-datetime = "0.6.1"
 whisper-jni = "1.7.1"
 ktor = "3.0.3"
+credentials = "1.5.0"
 
 
 [libraries]
+firebase-firestore-ktx = { module = "com.google.firebase:firebase-firestore-ktx" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
@@ -59,13 +64,24 @@ compose-material3 = { module = "org.jetbrains.compose.material3:material3", vers
 
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
 
-# WhisperJNI for Desktop
-whisper-jni = { module = "io.github.givimad:whisper-jni", version.ref = "whisper-jni" }
-
 # Ktor for model downloading
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+
+# Firebase
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+firebase-functions-ktx = { module = "com.google.firebase:firebase-functions-ktx" }
+
+# Credential Manager (new Google Sign-In)
+credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version = "1.1.1" }
+# RevenueCat
+revenuecat-purchases = { module = "com.revenuecat.purchases:purchases", version.ref = "revenuecat" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -6,6 +7,16 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.sqldelight)
+    kotlin("plugin.serialization") version "2.1.21"
+    id("com.google.gms.google-services")
+}
+
+// Load local.properties for signing config
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(localPropertiesFile.inputStream())
+    }
 }
 
 kotlin {
@@ -39,7 +50,21 @@ kotlin {
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
-            // Native whisper.cpp - built via CMake, no external dependency
+
+            // Firebase Auth
+            implementation(project.dependencies.platform(libs.firebase.bom))
+            implementation(libs.firebase.auth.ktx)
+            implementation(libs.play.services.auth)
+            implementation(libs.firebase.firestore.ktx)
+            implementation(libs.firebase.functions.ktx)
+
+            // RevenueCat
+            implementation(libs.revenuecat.purchases)
+
+            // Credential Manager (new Google Sign-In)
+            implementation(libs.credentials)
+            implementation(libs.credentials.play.services)
+            implementation(libs.googleid)
         }
 
         commonMain.dependencies {
@@ -59,6 +84,7 @@ kotlin {
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.datetime)
             implementation(libs.ktor.client.core)
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
         }
 
         commonTest.dependencies {
@@ -69,7 +95,6 @@ kotlin {
             implementation(libs.sqldelight.sqlite.driver)
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
-            implementation(libs.whisper.jni)
             implementation(libs.ktor.client.okhttp)
         }
 
@@ -90,19 +115,22 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-
-        // Only build for ARM64 (most modern phones)
-        // You can add "armeabi-v7a" for older 32-bit phones
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
-    // Tell Gradle to use CMake for native code
-    externalNativeBuild {
-        cmake {
-            path = file("src/androidMain/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    // ✅ ADD THIS: Signing Configurations
+    signingConfigs {
+        // Debug config (uses default debug.keystore)
+        getByName("debug") {
+            // Android Studio handles this automatically
+        }
+
+        // Release config (reads from local.properties)
+        create("release") {
+            // Option 1: Use debug keystore for testing (temporary)
+            storeFile = localProperties.getProperty("RELEASE_STORE_FILE")?.let { file(it) }
+            storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+            keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+            keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
         }
     }
 
@@ -110,15 +138,17 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // Required for native libraries
-        jniLibs {
-            useLegacyPackaging = true
-        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release") // ✅ Now this works!
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
