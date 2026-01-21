@@ -141,6 +141,7 @@ IMPORTANT:
 - Return ONLY the cleaned text, no explanations or commentary
 `;
 
+/*
 const FORMAL_STYLE = `
 
 STYLE: FORMAL & PROFESSIONAL:
@@ -204,6 +205,7 @@ Keep it relaxed and approachable:
 GOAL: Like texting a friend, but cleaned up and readable.
 `;
 
+
 function getStyleAddition(style: string): string {
   switch (style.toLowerCase()) {
   case "formal":
@@ -212,20 +214,21 @@ function getStyleAddition(style: string): string {
     return CASUAL_STYLE;
   case "informal":
   default:
-    return INFORMAL_STYLE;
+    return "";
   }
 }
+*/
 
 export const cleanupText = onCall(
   {secrets: [geminiApiKey], timeoutSeconds: 60, maxInstances: 10},
   async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in");
     const text = request.data.text as string;
-    const style = (request.data.style as string) || "informal";
+//    const style = (request.data.style as string) || "informal";
     if (!text) throw new HttpsError("invalid-argument", "Missing text");
 
-    const styleAddition = getStyleAddition(style);
-    const fullPrompt = BASE_CLEANUP_RULES + styleAddition + "\n\nTranscription:\n\"" + text + "\"";
+//    const styleAddition = getStyleAddition(style);
+    const fullPrompt = BASE_CLEANUP_RULES + "\n\nTranscription:\n\"" + text + "\"";
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey.value()}`,
@@ -234,7 +237,7 @@ export const cleanupText = onCall(
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           contents: [{parts: [{text: fullPrompt}]}],
-          generationConfig: {temperature: 0.1, maxOutputTokens: 4096, topP: 0.8, topK: 10},
+          generationConfig: {temperature: 1.0, maxOutputTokens: 4096, topP: 0.8, topK: 40},
         }),
       }
     );
