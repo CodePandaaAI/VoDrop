@@ -21,7 +21,7 @@ import kotlin.math.log10
 
 /**
  * Android audio recorder using AudioRecord API
- * Produces 32kHz, mono, 16-bit PCM audio for high-quality Whisper V3
+ * Produces 48kHz, mono, 16-bit PCM audio (Native Android Quality)
  *
  * OPTIMIZED: Pre-sized buffer to avoid reallocations
  */
@@ -37,10 +37,10 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     private var isCurrentlyRecording = false
     private var recordingThread: Thread? = null
 
-    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio at 32kHz
-    // 30s × 32000Hz × 2 bytes = 1,920,000 bytes
-    // This prevents reallocations during recording
-    private var audioData = ByteArrayOutputStream(1_920_000)
+    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio at 48kHz
+    // 30s × 48000Hz × 2 bytes = 2,880,000 bytes (~2.8 MB)
+    // This prevents reallocations during recording which causes GC lag
+    private var audioData = ByteArrayOutputStream(2_880_000)
 
     private val lock = Any()
 
@@ -62,11 +62,15 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
         withContext(Dispatchers.IO) {
             try {
-                val bufferSize = AudioRecord.getMinBufferSize(
+                // Get strictly valid buffer size for 48kHz
+                val minBufferSize = AudioRecord.getMinBufferSize(
                     AudioConfig.SAMPLE_RATE,
                     CHANNEL_CONFIG,
                     AUDIO_FORMAT
-                ).coerceAtLeast(4096)
+                )
+
+                // Safety: Ensure buffer is at least ~8ms of audio
+                val bufferSize = if (minBufferSize > 0) minBufferSize * 2 else 4096
 
                 synchronized(lock) {
                     @Suppress("MissingPermission")

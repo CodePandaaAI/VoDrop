@@ -24,6 +24,7 @@ class AndroidFirebaseFunctionsService : FirebaseFunctionsService {
 
             val result = functions
                 .getHttpsCallable("transcribe")
+                .apply { setTimeout(540, java.util.concurrent.TimeUnit.SECONDS) }
                 .call(data)
                 .await()
 
@@ -51,6 +52,7 @@ class AndroidFirebaseFunctionsService : FirebaseFunctionsService {
 
             val result = functions
                 .getHttpsCallable("cleanupText")
+                .apply { setTimeout(540, java.util.concurrent.TimeUnit.SECONDS) }
                 .call(data)
                 .await()
 

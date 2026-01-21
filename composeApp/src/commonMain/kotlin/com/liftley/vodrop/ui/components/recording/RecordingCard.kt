@@ -87,7 +87,7 @@ fun RecordingCard(
             Spacer(Modifier.height(40.dp))
             RecordButton(phase, onRecordClick, 160.dp)
 
-            if (currentTranscription.isNotEmpty() && phase != RecordingPhase.PROCESSING) {
+            if (currentTranscription.isNotEmpty()) {
                 Spacer(Modifier.height(40.dp))
                 Card(
                     Modifier.fillMaxWidth(),

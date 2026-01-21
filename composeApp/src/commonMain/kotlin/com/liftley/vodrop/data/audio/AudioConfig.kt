@@ -4,10 +4,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Audio format specification for cloud transcription.
- * Format: 32kHz, mono, 16-bit PCM (Optimized for high-quality Whisper V3)
+ * Format: 48kHz, mono, 16-bit PCM (Android Native Standard)
  */
 object AudioConfig {
-    const val SAMPLE_RATE = 32000  // 🚀 HIGH QUALITY for better transcription
+    const val SAMPLE_RATE = 48000  // 🚀 MAX QUALITY (Native Android Rate)
     const val CHANNELS = 1
     const val BITS_PER_SAMPLE = 16
     const val BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8

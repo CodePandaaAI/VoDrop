@@ -60,14 +60,19 @@ class MainViewModel(
                 val duration = AudioConfig.calculateDurationSeconds(audio)
                 if (duration < 0.5f) { update { copy(recordingPhase = RecordingPhase.READY, error = "Too short") }; return@launch }
 
-                val result = transcribeUseCase(audio, _uiState.value.transcriptionMode) { update { copy(progressMessage = it) } }
+                val result = transcribeUseCase(
+                    audioData = audio, 
+                    mode = _uiState.value.transcriptionMode,
+                    onProgress = { update { copy(progressMessage = it) } },
+                    onIntermediateResult = { text -> update { copy(currentTranscription = text) } }
+                )
                 when (result) {
-                    is TranscribeAudioUseCase.Result.Success -> {
+                    is TranscribeAudioUseCase.UseCaseResult.Success -> {
                         update { copy(currentTranscription = result.text, recordingPhase = RecordingPhase.READY, progressMessage = "") }
                         historyUseCase.saveTranscription(result.text)
                         viewModelScope.launch { platformAuth.recordUsage(duration.toLong()) }
                     }
-                    is TranscribeAudioUseCase.Result.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
+                    is TranscribeAudioUseCase.UseCaseResult.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
                 }
             }.onFailure { update { copy(recordingPhase = RecordingPhase.READY, error = it.message, progressMessage = "") } }
         }
