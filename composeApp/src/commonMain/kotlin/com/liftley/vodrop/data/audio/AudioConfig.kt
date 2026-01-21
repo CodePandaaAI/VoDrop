@@ -4,10 +4,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Audio format specification for cloud transcription.
- * Format: 16kHz, mono, 16-bit PCM
+ * Format: 32kHz, mono, 16-bit PCM (Optimized for high-quality Whisper V3)
  */
 object AudioConfig {
-    const val SAMPLE_RATE = 16000
+    const val SAMPLE_RATE = 32000  // 🚀 HIGH QUALITY for better transcription
     const val CHANNELS = 1
     const val BITS_PER_SAMPLE = 16
     const val BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8
@@ -16,8 +16,6 @@ object AudioConfig {
     fun calculateDurationSeconds(audioData: ByteArray): Float {
         return audioData.size.toFloat() / (SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE)
     }
-
-    // REMOVED: pcmBytesToFloatSamples() - was for local Whisper.cpp, now cloud-only
 }
 
 /**

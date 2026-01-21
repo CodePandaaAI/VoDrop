@@ -26,7 +26,6 @@ import com.revenuecat.purchases.Package
 import com.revenuecat.purchases.PurchaseParams
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
-import com.revenuecat.purchases.awaitCustomerInfo
 import com.revenuecat.purchases.awaitLogIn
 import com.revenuecat.purchases.awaitLogOut
 import com.revenuecat.purchases.awaitPurchase
@@ -100,14 +99,17 @@ actual class PlatformAuth(
             return
         }
 
-        // Check Pro status from RevenueCat
-        val isPro = try {
-            val info = Purchases.sharedInstance.awaitCustomerInfo()
-            info.entitlements[AuthConfig.ENTITLEMENT_PRO]?.isActive == true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking pro status", e)
-            false
-        }
+//        // Check Pro status from RevenueCat
+//        val isPro = try {
+//            val info = Purchases.sharedInstance.awaitCustomerInfo()
+//            info.entitlements[AuthConfig.ENTITLEMENT_PRO]?.isActive == true
+//        } catch (e: Exception) {
+//            Log.e(TAG, "Error checking pro status", e)
+//            false
+//        }
+
+        // ⚠️ TESTING: Force Pro status
+        val isPro = true  // TODO: Revert before release
 
         // Load user data from Firestore (may fail if database doesn't exist)
         val deviceId = deviceManager.getDeviceId()

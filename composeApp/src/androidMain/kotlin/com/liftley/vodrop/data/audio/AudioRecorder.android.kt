@@ -21,7 +21,7 @@ import kotlin.math.log10
 
 /**
  * Android audio recorder using AudioRecord API
- * Produces 16kHz, mono, 16-bit PCM audio for Whisper compatibility
+ * Produces 32kHz, mono, 16-bit PCM audio for high-quality Whisper V3
  *
  * OPTIMIZED: Pre-sized buffer to avoid reallocations
  */
@@ -37,10 +37,10 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     private var isCurrentlyRecording = false
     private var recordingThread: Thread? = null
 
-    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio (common case)
-    // 30s × 16000Hz × 2 bytes = 960,000 bytes
-    // This prevents 14+ reallocations during recording
-    private var audioData = ByteArrayOutputStream(960_000)
+    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio at 32kHz
+    // 30s × 32000Hz × 2 bytes = 1,920,000 bytes
+    // This prevents reallocations during recording
+    private var audioData = ByteArrayOutputStream(1_920_000)
 
     private val lock = Any()
 
@@ -153,7 +153,10 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
                 _status.value = RecordingStatus.Idle
 
-                audioData.toByteArray()
+                val data = audioData.toByteArray()
+                // Reset buffer to free memory if needed, or keep for next time
+                // audioData.reset()
+                data
             }
         }
     }

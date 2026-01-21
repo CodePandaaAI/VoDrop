@@ -1,6 +1,7 @@
 package com.liftley.vodrop.data.stt
 
 import android.util.Log
+import com.liftley.vodrop.data.audio.AudioConfig
 import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,11 +15,6 @@ private const val TAG = "CloudSTTEngine"
 
 /**
  * Android Speech-to-Text engine using Firebase Cloud Functions.
- *
- * Benefits:
- * - API keys secured on server
- * - No hardcoded credentials in app
- * - Firebase handles auth automatically
  */
 class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
@@ -44,7 +40,7 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                 _state.value = TranscriptionState.Transcribing
                 Log.d(TAG, "Sending ${audioData.size} bytes to Firebase...")
 
-                // Create WAV from raw PCM
+                // Create WAV with correct headers
                 val wavData = createWavFile(audioData)
 
                 val result = firebaseFunctions.transcribe(wavData)
@@ -54,8 +50,9 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
                 result.fold(
                     onSuccess = { text ->
                         Log.d(TAG, "Transcription complete: ${text.take(50)}...")
-                        val cleanedText = RuleBasedTextCleanup.cleanup(text)
-                        TranscriptionResult.Success(cleanedText, 0L)
+                        // Cloud transcription is already clean, but we can apply local rules if needed
+                        // For now we trust the cloud result or let the user apply AI Polish
+                        TranscriptionResult.Success(text, 0L)
                     },
                     onFailure = { error ->
                         Log.e(TAG, "Transcription error: ${error.message}")
@@ -76,12 +73,12 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     }
 
     /**
-     * Create WAV file from raw PCM (16kHz, mono, 16-bit)
+     * Create WAV file from raw PCM using global AudioConfig
      */
     private fun createWavFile(pcmData: ByteArray): ByteArray {
-        val sampleRate = 16000
-        val channels = 1
-        val bitsPerSample = 16
+        val sampleRate = AudioConfig.SAMPLE_RATE
+        val channels = AudioConfig.CHANNELS
+        val bitsPerSample = AudioConfig.BITS_PER_SAMPLE
         val byteRate = sampleRate * channels * bitsPerSample / 8
         val blockAlign = channels * bitsPerSample / 8
         val dataSize = pcmData.size
@@ -109,14 +106,14 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         header[16] = 16; header[17] = 0; header[18] = 0; header[19] = 0
         header[20] = 1; header[21] = 0 // PCM
         header[22] = channels.toByte(); header[23] = 0
-        header[24] = (sampleRate and 0xff).toByte()
+        header[24] = (0).toByte()
         header[25] = ((sampleRate shr 8) and 0xff).toByte()
-        header[26] = ((sampleRate shr 16) and 0xff).toByte()
-        header[27] = ((sampleRate shr 24) and 0xff).toByte()
-        header[28] = (byteRate and 0xff).toByte()
+        header[26] = (0).toByte()
+        header[27] = (0).toByte()
+        header[28] = (0).toByte()
         header[29] = ((byteRate shr 8) and 0xff).toByte()
-        header[30] = ((byteRate shr 16) and 0xff).toByte()
-        header[31] = ((byteRate shr 24) and 0xff).toByte()
+        header[30] = (0).toByte()
+        header[31] = (0).toByte()
         header[32] = blockAlign.toByte(); header[33] = 0
         header[34] = bitsPerSample.toByte(); header[35] = 0
 

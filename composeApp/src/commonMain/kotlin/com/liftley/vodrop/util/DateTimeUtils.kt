@@ -17,13 +17,4 @@ object DateTimeUtils {
         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         return "${now.date} ${now.hour.toString().padStart(2, '0')}:${now.minute.toString().padStart(2, '0')}"
     }
-
-    /**
-     * Format a relative time (e.g., "2 minutes ago", "1 hour ago")
-     */
-    fun formatRelativeTime(timestamp: String): String {
-        // For now, just return the timestamp
-        // Can be enhanced later with relative time logic
-        return timestamp
-    }
 }

@@ -19,22 +19,48 @@ export const transcribe = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Must be logged in");
     }
+
     const audioBase64 = request.data.audio as string;
     if (!audioBase64) {
       throw new HttpsError("invalid-argument", "Missing audio");
     }
+
+    // Convert base64 to buffer
     const audioBuffer = Buffer.from(audioBase64, "base64");
+
+    // Prepare FormData for Groq API
     const formData = new FormData();
-    formData.append("file", audioBuffer, {filename: "audio.wav", contentType: "audio/wav"});
+    formData.append("file", audioBuffer, {
+      filename: "audio.wav",
+      contentType: "audio/wav",
+    });
     formData.append("model", "whisper-large-v3");
     formData.append("language", "en");
     formData.append("response_format", "json");
+
+    // ✅ ACCURACY TUNING
+    // Temperature 0 makes the model deterministic and focuses on high-probability words.
+    // This significantly reduces "hallucinations" (making things up).
+    formData.append("temperature", "0");
+
+    // Context prompt to guide the style
+    formData.append("prompt", "Voice note transcription. Clear, accurate, verbatim speech.");
+
     const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
-      headers: {Authorization: `Bearer ${groqApiKey.value()}`},
+      headers: {
+        Authorization: `Bearer ${groqApiKey.value()}`,
+        // form-data headers are handled automatically by the library
+      },
       body: formData,
     });
-    if (!response.ok) throw new HttpsError("internal", "Transcription failed");
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Groq API Error:", errorText);
+        throw new HttpsError("internal", "Transcription failed: " + response.statusText);
+    }
+
     const result = (await response.json()) as {text: string};
     return {text: result.text};
   }
@@ -202,7 +228,7 @@ export const cleanupText = onCall(
     const fullPrompt = BASE_CLEANUP_RULES + styleAddition + "\n\nTranscription:\n\"" + text + "\"";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.value()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey.value()}`,
       {
         method: "POST",
         headers: {"Content-Type": "application/json"},

@@ -167,7 +167,7 @@ class FirestoreManager {
 
     companion object {
         // Helper to get next month reset date (duplicated for access)
-        private fun UserData.Companion.getNextMonthResetDate(): String {
+        private fun UserData.getNextMonthResetDate(): String {
             val calendar = java.util.Calendar.getInstance()
             calendar.add(java.util.Calendar.MONTH, 1)
             calendar.set(java.util.Calendar.DAY_OF_MONTH, 1)
