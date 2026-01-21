@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.data.stt.TranscriptionState
 import com.liftley.vodrop.ui.main.RecordingPhase
 
 /**
@@ -29,17 +28,13 @@ import com.liftley.vodrop.ui.main.RecordingPhase
 @Composable
 fun RecordButton(
     phase: RecordingPhase,
-    transcriptionState: TranscriptionState,
     onClick: () -> Unit,
     size: Dp = 160.dp, // Material 3 Expressive: Bigger default
     modifier: Modifier = Modifier
 ) {
     val isListening = phase == RecordingPhase.LISTENING
-    val isProcessing = phase == RecordingPhase.PROCESSING ||
-            transcriptionState is TranscriptionState.Downloading ||
-            transcriptionState is TranscriptionState.Initializing
-    val isEnabled = phase != RecordingPhase.PROCESSING &&
-            transcriptionState !is TranscriptionState.Downloading
+    val isProcessing = phase == RecordingPhase.PROCESSING
+    val isEnabled = phase != RecordingPhase.PROCESSING
 
     // Material 3 Expressive: Flat colors (no animations)
     val buttonColor = when {

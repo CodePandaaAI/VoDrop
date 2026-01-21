@@ -92,7 +92,6 @@ fun MainScreen(
                 item {
                     RecordingCard(
                         phase = state.recordingPhase,
-                        transcriptionState = state.transcriptionState,
                         currentTranscription = state.currentTranscription,
                         progressMessage = state.progressMessage,
                         mode = state.transcriptionMode,

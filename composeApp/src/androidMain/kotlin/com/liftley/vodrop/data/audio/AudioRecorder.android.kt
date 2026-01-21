@@ -57,7 +57,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
         // Check permission
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) {
-            throw AudioRecorderException("RECORD_AUDIO permission not granted")
+            throw AudioRecorderException("MICROPHONE permission not granted")
         }
 
         withContext(Dispatchers.IO) {

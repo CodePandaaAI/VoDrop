@@ -9,8 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
  */
 sealed interface TranscriptionState {
     data object NotReady : TranscriptionState
-    data class Initializing(val message: String = "Initializing...") : TranscriptionState
-    data class Downloading(val progress: Float) : TranscriptionState  // Desktop only
     data object Ready : TranscriptionState
     data object Transcribing : TranscriptionState
     data class Error(val message: String) : TranscriptionState
