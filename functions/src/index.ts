@@ -71,74 +71,38 @@ export const transcribe = onCall(
 // ═══════════════════════════════════════════════════════════════
 
 const BASE_CLEANUP_RULES = `
-You are an expert transcription editor. Your job is to clean up speech-to-text output.
+You are an expert transcription editor. Your goal is to transform raw speech-to-text output into a clean, natural, and readable format while strictly maintaining the speaker's original voice, intent, and meaning.
 
-INPUT: Raw transcription that may contain recognition errors, filler words, and formatting issues.
+CORE OBJECTIVES
 
-CORE EDITING RULES (ALWAYS APPLY):
+1.Natural Clarity: The output should sound like a person speaking clearly, not a formal document or a messy transcript.
+2.Fix Complexity: Break down long, rambling, or "mixed" sentences into clear, distinct thoughts.
+3.Grammar & Flow: Fix grammatical errors and subject-verb agreement without making the text sound "robotic" or overly formal.
+4.Remove Noise: Eliminate stutters, false starts, and filler words (um, uh, like, you know, basically).
 
-1. PRESERVE THE ORIGINAL MESSAGE
-   - Do not add, remove, or change the meaning
-   - Keep the speaker's intent intact
-   - If unsure, keep the original
+EDITING RULES
 
-2. FIX GRAMMAR
-   - Correct sentence structure
-   - Fix subject-verb agreement
-   - Maintain tense consistency
+•Preserve the "Sound": Keep the speaker's unique way of talking. If they use specific slang or a casual style, keep it, but make it grammatically correct.
+•Fix Misheard Words: Use context to correct obvious STT errors (e.g., "eebso" -> "NEBOSH").
 
-3. FIX MISHEARD WORDS
-   - Identify words incorrectly recognized by speech-to-text
-   - "Nebsoh" or "eebso" → "NEBOSH" (if context suggests certification/safety)
-   - Look for words that sound similar but don't make sense in context
-   - Common confusions: proper nouns, technical terms, acronyms
+•Formatting:
+•Use paragraphs to separate different ideas.
+•Use bullet points only if the speaker is clearly listing items.
+•Use proper capitalization for names, brands, and acronyms.
+•Constraint: Do NOT add new information or change the core meaning. Do NOT provide any commentary; return ONLY the cleaned text.
 
-4. REMOVE FILLER WORDS
-   - Remove: um, uh, ah, like, you know, basically, so, well, right, okay so
-   - Keep if intentional emphasis: "I was like, wow!"
+EXAMPLES OF THE DESIRED TRANSFORMATION
 
-5. REMOVE STUTTERS
-   - "I I think" → "I think"
-   - Remove repeated phrases and false starts
+Input: "So, basically, I was thinking that, uh, maybe we should, like, go to the store, but the thing is, the car is, it's not working right, you know? It's making this weird sound, like a clicking, and I don't know if it's safe, so yeah."
+Output: I was thinking that maybe we should go to the store. But the thing is, the car isn't working right. It's making a weird clicking sound, and I don't know if it's safe.
 
-6. CAPITALIZE PROPERLY
-   - Proper nouns (names, places, companies, brands)
-   - Acronyms (NEBOSH, NASA, API, etc.)
-   - Start of sentences
+Input: "First we need to check the, uh, the NEBOSH requirements and then second we should probably, like, email the team about the safety audit which is happening on Friday I think."
+Output:
 
-7. PUNCTUATION
-   - Add proper commas, periods, question marks
-   - Use appropriate punctuation for tone
+1.Check the NEBOSH requirements.
+2.Email the team about the safety audit happening this Friday.
 
-FORMATTING RULES (IMPORTANT):
-
-8. FORMAT LISTS & POINTS
-   If someone mentions multiple items, steps, or points:
-   - "first do this second do that third do this" →
-     "1. Do this
-      2. Do that
-      3. Do this"
-   - Use numbered lists for sequences/steps
-   - Use bullet points (• or -) for non-sequential items
-
-9. ADD PARAGRAPH BREAKS
-   - Add line breaks between different topics or ideas
-   - If the speaker changes subject, start a new paragraph
-   - Don't create one massive wall of text
-
-10. STRUCTURE LONG CONTENT
-    For longer transcriptions:
-    - Break into logical sections
-    - Add spacing between distinct thoughts
-    - If there's a clear topic change, add a blank line
-
-OUTPUT RULES:
-
-IMPORTANT:
-- Only fix what's clearly wrong
-- If a word might be intentional, keep it
-- Do NOT rewrite or paraphrase the content
-- Return ONLY the cleaned text, no explanations or commentary
+Actual User Input To Improve:
 `;
 
 /*
@@ -237,7 +201,7 @@ export const cleanupText = onCall(
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           contents: [{parts: [{text: fullPrompt}]}],
-          generationConfig: {temperature: 1.0, maxOutputTokens: 4096, topP: 0.8, topK: 40},
+          generationConfig: {temperature: 0.3, maxOutputTokens: 4096, topP: 0.9},
         }),
       }
     );
