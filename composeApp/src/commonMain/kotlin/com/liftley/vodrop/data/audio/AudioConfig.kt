@@ -34,6 +34,10 @@ interface AudioRecorder {
     val status: StateFlow<RecordingStatus>
     suspend fun startRecording()
     suspend fun stopRecording(): ByteArray
+
+    /** Stops recording and discards data */
+    suspend fun cancelRecording()
+
     fun isRecording(): Boolean
     fun release()
 }

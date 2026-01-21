@@ -19,6 +19,10 @@ data class MainUiState(
     val progressMessage: String = "",
     val error: String? = null,
 
+    // ✅ NEW: Recording Timer & Amplitudes
+    val recordingDurationSeconds: Long = 0L,
+    val currentAmplitude: Float = -60f, // For visualizer
+
     // History
     val history: List<Transcription> = emptyList(),
     val transcriptionMode: TranscriptionMode = TranscriptionMode.DEFAULT,

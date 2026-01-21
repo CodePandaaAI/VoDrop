@@ -1,15 +1,18 @@
 package com.liftley.vodrop.data.stt
 
 import android.util.Log
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.storage.FirebaseStorage
 import com.liftley.vodrop.data.audio.AudioConfig
-import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import java.util.UUID
 
 private const val TAG = "CloudSTTEngine"
 
@@ -21,54 +24,61 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     private val _state = MutableStateFlow<TranscriptionState>(TranscriptionState.NotReady)
     override val state: StateFlow<TranscriptionState> = _state.asStateFlow()
 
-    private val firebaseFunctions: FirebaseFunctionsService by inject()
+    private val functions: FirebaseFunctions by lazy { FirebaseFunctions.getInstance() }
+    private val storage: FirebaseStorage by inject()
 
     override suspend fun initialize() {
-        Log.d(TAG, "Cloud engine initialized (Firebase)")
         _state.value = TranscriptionState.Ready
     }
 
     override fun isReady(): Boolean = _state.value is TranscriptionState.Ready
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
-        if (audioData.isEmpty()) {
-            return TranscriptionResult.Error("No audio data provided")
-        }
-
         return withContext(Dispatchers.IO) {
             try {
                 _state.value = TranscriptionState.Transcribing
-                Log.d(TAG, "Sending ${audioData.size} bytes to Firebase...")
 
-                // Create WAV with correct headers
+                // 1. Create WAV Data
                 val wavData = createWavFile(audioData)
+                val filename = "${UUID.randomUUID()}.wav"
+                val storageRef = storage.reference.child("uploads/$filename")
 
-                val result = firebaseFunctions.transcribe(wavData)
+                // 2. Upload to Firebase Storage (Robust on slow internet)
+                Log.d(TAG, "Uploading ${wavData.size} bytes to Storage...")
+                storageRef.putBytes(wavData).await()
+
+                // 3. Get the 'gs://' URI (Internal Google Path)
+                // Note: We reconstruct it manually to save an API call, or you can get it from metadata
+                val gcsUri = "gs://${storageRef.bucket}/uploads/$filename"
+
+                // 4. Call Cloud Function with the URI (Lightweight request)
+                Log.d(TAG, "Calling transcribe function with URI: $gcsUri")
+                val result = functions
+                    .getHttpsCallable("transcribeChirp") // New function name
+                    .apply { setTimeout(540, java.util.concurrent.TimeUnit.SECONDS) }
+                    .call(mapOf("gcsUri" to gcsUri))
+                    .await()
+
+                // 5. Cleanup: Delete file after success (Optional, or use Lifecycle policy in Console)
+                storageRef.delete().addOnFailureListener { Log.w(TAG, "Failed to cleanup audio", it) }
 
                 _state.value = TranscriptionState.Ready
 
-                result.fold(
-                    onSuccess = { text ->
-                        Log.d(TAG, "Transcription complete: ${text.take(50)}...")
-                        // Cloud transcription is already clean, but we can apply local rules if needed
-                        // For now we trust the cloud result or let the user apply AI Polish
-                        TranscriptionResult.Success(text, 0L)
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "Transcription error: ${error.message}")
-                        TranscriptionResult.Error(error.message ?: "Transcription failed")
-                    }
-                )
+                @Suppress("UNCHECKED_CAST")
+                val response = result.getData() as? Map<String, Any>
+                val text = response?.get("text") as? String ?: ""
+
+                TranscriptionResult.Success(text, 0L)
+
             } catch (e: Exception) {
-                Log.e(TAG, "Transcription exception", e)
+                Log.e(TAG, "Transcription failed", e)
                 _state.value = TranscriptionState.Error(e.message ?: "Unknown error")
-                TranscriptionResult.Error("Transcription failed: ${e.message}")
+                TranscriptionResult.Error("Failed: ${e.message}")
             }
         }
     }
 
     override fun release() {
-        Log.d(TAG, "Releasing cloud engine resources")
         _state.value = TranscriptionState.NotReady
     }
 

@@ -27,4 +27,6 @@ val platformModule = module {
 
     // Text cleanup (uses Firebase now)
     single<TextCleanupService> { FirebaseTextCleanupService(get()) }
+
+    single { com.google.firebase.storage.FirebaseStorage.getInstance() }
 }

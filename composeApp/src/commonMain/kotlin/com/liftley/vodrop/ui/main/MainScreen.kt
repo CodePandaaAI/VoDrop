@@ -94,7 +94,6 @@ fun MainScreen(
                         phase = state.recordingPhase,
                         currentTranscription = state.currentTranscription,
                         progressMessage = state.progressMessage,
-                        mode = state.transcriptionMode,
                         error = state.error,
                         onRecordClick = viewModel::onRecordClick,
                         onClearError = viewModel::clearError,

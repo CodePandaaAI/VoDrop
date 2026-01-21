@@ -7,6 +7,7 @@ import com.liftley.vodrop.data.audio.*
 import com.liftley.vodrop.data.stt.*
 import com.liftley.vodrop.domain.model.Transcription
 import com.liftley.vodrop.domain.usecase.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -20,6 +21,8 @@ class MainViewModel(
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
+
+    private var timerJob: Job? = null
 
     init {
         observeEngineState()
@@ -41,6 +44,20 @@ class MainViewModel(
         }
     }
 
+    fun onCancelRecording() {
+        if (_uiState.value.recordingPhase == RecordingPhase.LISTENING) {
+            stopTimer()
+            viewModelScope.launch {
+                audioRecorder.cancelRecording()
+                update { copy(recordingPhase = RecordingPhase.READY, currentTranscription = "", recordingDurationSeconds = 0, currentAmplitude = -60f) }
+            }
+        }
+    }
+
+    private fun stopTimer() {
+        timerJob?.cancel()
+        timerJob = null
+    }
     private fun initializeEngine() = viewModelScope.launch {
         runCatching { sttEngine.initialize() }.onFailure { update { copy(error = it.message) } }
     }
@@ -61,7 +78,7 @@ class MainViewModel(
                 if (duration < 0.5f) { update { copy(recordingPhase = RecordingPhase.READY, error = "Too short") }; return@launch }
 
                 val result = transcribeUseCase(
-                    audioData = audio, 
+                    audioData = audio,
                     mode = _uiState.value.transcriptionMode,
                     onProgress = { update { copy(progressMessage = it) } },
                     onIntermediateResult = { text -> update { copy(currentTranscription = text) } }

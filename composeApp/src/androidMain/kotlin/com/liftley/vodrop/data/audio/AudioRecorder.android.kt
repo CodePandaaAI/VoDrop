@@ -131,6 +131,26 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
         }
     }
 
+    override suspend fun cancelRecording() {
+        if (!isCurrentlyRecording) return
+
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                isCurrentlyRecording = false
+            }
+            recordingThread?.join(2000)
+            recordingThread = null
+
+            synchronized(lock) {
+                audioRecord?.stop()
+                audioRecord?.release()
+                audioRecord = null
+                audioData.reset() // Discard data
+                _status.value = RecordingStatus.Idle
+            }
+        }
+    }
+
     override suspend fun stopRecording(): ByteArray {
         if (!isCurrentlyRecording) {
             throw AudioRecorderException("Not currently recording")

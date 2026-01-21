@@ -74,6 +74,7 @@ firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "fir
 firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 firebase-functions-ktx = { module = "com.google.firebase:firebase-functions-ktx" }
+firebase-storage-ktx = {module = "com.google.firebase:firebase-storage-ktx"}
 
 # Credential Manager (new Google Sign-In)
 credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }

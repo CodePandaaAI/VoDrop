@@ -17,7 +17,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,14 +26,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.ui.main.RecordingPhase
-import com.liftley.vodrop.ui.main.TranscriptionMode
 
 @Composable
 fun RecordingCard(
     phase: RecordingPhase,
     currentTranscription: String,
     progressMessage: String,
-    mode: TranscriptionMode,
     error: String?,
     onRecordClick: () -> Unit,
     onClearError: () -> Unit,
@@ -69,20 +66,6 @@ fun RecordingCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-
-            if (phase == RecordingPhase.READY || phase == RecordingPhase.LISTENING) {
-                Spacer(Modifier.height(16.dp))
-                Surface(
-                    color = if (mode == TranscriptionMode.WITH_AI_POLISH) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Text(
-                        if (mode == TranscriptionMode.WITH_AI_POLISH) "✨ AI Polish" else "🎤 Standard",
-                        Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
 
             Spacer(Modifier.height(40.dp))
             RecordButton(phase, onRecordClick, 160.dp)

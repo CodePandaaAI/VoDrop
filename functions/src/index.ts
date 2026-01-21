@@ -1,80 +1,97 @@
-import {onCall, HttpsError} from "firebase-functions/v2/https";
-import {defineSecret} from "firebase-functions/params";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
-import fetch from "node-fetch";
-import FormData from "form-data";
+import { v2 } from "@google-cloud/speech";
 
 admin.initializeApp();
 
-const groqApiKey = defineSecret("GROQ_API_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// ═══════════════════════════════════════════════════════════════
-// GROQ WHISPER - Speech to Text
-// ═══════════════════════════════════════════════════════════════
+// 1. Point Client to the Mumbai Endpoint (asia-south1)
+const speechClient = new v2.SpeechClient({
+  apiEndpoint: "asia-south1-speech.googleapis.com"
+});
 
-export const transcribe = onCall(
+export const transcribeChirp = onCall(
   {
-    secrets: [groqApiKey],
-    timeoutSeconds: 540, // Increased to 9 mins to avoid DEADLINE_EXCEEDED
-    memory: "1GiB",      // Increased to prevent OOM
+    timeoutSeconds: 540,
+    memory: "512MiB",
     maxInstances: 10,
   },
   async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be logged in");
-    }
+    // DEBUG LOG: This will show up in your Firebase Console Logs
+    console.log("v2.1: Starting Asia-South1 Transcription");
 
-    const audioBase64 = request.data.audio as string;
-    if (!audioBase64) {
-      throw new HttpsError("invalid-argument", "Missing audio");
-    }
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in");
 
-    // Convert base64 to buffer
-    const audioBuffer = Buffer.from(audioBase64, "base64");
+    const gcsUri = request.data.gcsUri as string;
+    if (!gcsUri) throw new HttpsError("invalid-argument", "Missing gcsUri");
 
-    // Prepare FormData for Groq API
-    const formData = new FormData();
-    formData.append("file", audioBuffer, {
-      filename: "audio.wav",
-      contentType: "audio/wav",
-    });
-    formData.append("model", "whisper-large-v3");
-    formData.append("language", "en");
-    formData.append("response_format", "json");
+    const projectId = process.env.GCLOUD_PROJECT || "post-3424f";
 
-    // ✅ ACCURACY TUNING
-    // Temperature 0 makes the model deterministic and focuses on high-probability words.
-    // This significantly reduces "hallucinations" (making things up).
-    formData.append("temperature", "0");
+    // Extract bucket name
+    const matches = gcsUri.match(/gs:\/\/([^\/]+)\//);
+    const bucketName = matches ? matches[1] : "post-3424f.firebasestorage.app";
 
-    // Context prompt to guide the style
-    formData.append("prompt", "Voice note transcription. Clear, accurate, verbatim speech.");
+    // Create unique output path
+    const outputPrefix = `transcripts/${Date.now()}_${Math.random().toString(36).substring(7)}/`;
+    const outputUri = `gs://${bucketName}/${outputPrefix}`;
 
-    const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${groqApiKey.value()}`,
-        // form-data headers are handled automatically by the library
+    // 2. CRITICAL: This string MUST say "asia-south1", NOT "global"
+    const recognizer = `projects/${projectId}/locations/asia-south1/recognizers/_`;
+
+    console.log(`Using Recognizer: ${recognizer}`);
+
+    const config = {
+      autoDecodingConfig: {},
+      model: "chirp_3",
+      languageCodes: ["en-US"],
+      features: {
+        enableAutomaticPunctuation: true,
+        enableWordTimeOffsets: false,
       },
-      body: formData,
-    });
+    };
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Groq API Error:", errorText);
-        throw new HttpsError("internal", "Transcription failed: " + response.statusText);
+    try {
+      const [operation] = await speechClient.batchRecognize({
+        recognizer: recognizer,
+        config: config,
+        files: [{ uri: gcsUri }],
+        recognitionOutputConfig: {
+          gcsOutputConfig: { uri: outputUri }
+        }
+      });
+
+      const [response] = await operation.promise();
+
+      const resultPath = response.results?.[gcsUri]?.uri;
+      if (!resultPath) throw new HttpsError("internal", "No output file found.");
+
+      // Download JSON
+      const resultFileName = resultPath.replace(`gs://${bucketName}/`, "");
+      const bucket = admin.storage().bucket(bucketName);
+      const file = bucket.file(resultFileName);
+
+      const [content] = await file.download();
+      const jsonResult = JSON.parse(content.toString());
+
+      // Extract Text
+      const transcription = jsonResult.results
+        .map((r: any) => r.alternatives?.[0]?.transcript || "")
+        .join(" ");
+
+      try { await file.delete(); } catch (e) { }
+
+      return { text: transcription.trim() };
+
+    } catch (error: any) {
+      console.error("Chirp Error:", error);
+      throw new HttpsError("internal", "Transcription failed: " + error.message);
     }
-
-    const result = (await response.json()) as {text: string};
-    return {text: result.text};
   }
 );
 
-// ═══════════════════════════════════════════════════════════════
-// GEMINI - Text Cleanup with Full Prompts
-// ═══════════════════════════════════════════════════════════════
-
+// --- GEMINI CLEANUP FUNCTION ---
 const BASE_CLEANUP_RULES = `
 You are an expert transcription editor. Your goal is to transform raw speech-to-text output into a clean, natural, and readable format while maintaining the speaker's original voice, intent, and meaning.
 
@@ -132,13 +149,13 @@ STYLE: CASUAL & FRIENDLY
 
 function getStyleAddition(style: string): string {
   switch (style.toLowerCase()) {
-  case "formal":
-    return FORMAL_STYLE;
-  case "casual":
-    return CASUAL_STYLE;
-  case "informal":
-  default:
-    return INFORMAL_STYLE;
+    case "formal":
+      return FORMAL_STYLE;
+    case "casual":
+      return CASUAL_STYLE;
+    case "informal":
+    default:
+      return INFORMAL_STYLE;
   }
 }
 
@@ -146,7 +163,7 @@ export const cleanupText = onCall(
   {
     secrets: [geminiApiKey],
     timeoutSeconds: 300,
-    memory: "512MiB",  // Increased logic memory
+    memory: "512MiB",
     maxInstances: 10,
   },
   async (request) => {
@@ -159,17 +176,17 @@ export const cleanupText = onCall(
     const fullPrompt = BASE_CLEANUP_RULES + styleAddition + "\n\nTranscription:\n\"" + text + "\"";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey.value()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey.value()}`,
       {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{parts: [{text: fullPrompt}]}],
+          contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
-              temperature: 0.3, // Slightly higher for naturalness, but low enough for control
-              maxOutputTokens: 8192,
-              topP: 0.8,
-              topK: 10
+            temperature: 0.2,
+            maxOutputTokens: 4096,
+            topP: 0.8,
+            topK: 10
           },
         }),
       }
@@ -177,9 +194,9 @@ export const cleanupText = onCall(
     if (!response.ok) throw new HttpsError("internal", "Cleanup failed");
 
     interface GeminiResponse {
-      candidates?: Array<{content?: {parts?: Array<{text?: string}>}}>;
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     }
     const result = (await response.json()) as GeminiResponse;
-    return {text: result.candidates?.[0]?.content?.parts?.[0]?.text || text};
+    return { text: result.candidates?.[0]?.content?.parts?.[0]?.text || text };
   }
 );

@@ -57,6 +57,7 @@ kotlin {
             implementation(libs.play.services.auth)
             implementation(libs.firebase.firestore.ktx)
             implementation(libs.firebase.functions.ktx)
+            implementation(libs.firebase.storage.ktx)
 
             // RevenueCat
             implementation(libs.revenuecat.purchases)
