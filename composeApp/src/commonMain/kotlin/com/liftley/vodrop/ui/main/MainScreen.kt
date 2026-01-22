@@ -28,11 +28,25 @@ fun MainScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboardManager.current
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
-    // Sync drawer with ViewModel
-    LaunchedEffect(state.isDrawerOpen) { if (state.isDrawerOpen) drawerState.open() else drawerState.close() }
-    LaunchedEffect(drawerState.currentValue) { if (drawerState.isClosed) viewModel.closeDrawer() }
+    // FIXED: Simpler drawer state management
+    val drawerState = rememberDrawerState(
+        initialValue = if (state.isDrawerOpen) DrawerValue.Open else DrawerValue.Closed
+    )
+
+    // Sync: Close drawer in ViewModel when user swipes it closed
+    LaunchedEffect(drawerState.isClosed) {
+        if (drawerState.isClosed && state.isDrawerOpen) {
+            viewModel.closeDrawer()
+        }
+    }
+
+    // Sync: Open drawer when ViewModel says to
+    LaunchedEffect(state.isDrawerOpen) {
+        if (state.isDrawerOpen && drawerState.isClosed) {
+            drawerState.open()
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -71,7 +85,7 @@ fun MainScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             },
-                            enabled = state.isLoggedIn,
+                            enabled = state.isLoggedIn && !state.isLoading,
                             shape = MaterialTheme.shapes.extraLarge,
                             border = null,
                             colors = FilterChipDefaults.filterChipColors(
@@ -118,6 +132,7 @@ fun MainScreen(
                         HistoryCard(
                             transcription = item,
                             isPro = state.isPro,
+                            isLoading = state.isLoading,  // NEW: Pass loading state
                             isImproving = state.improvingId == item.id,
                             onCopy = { clipboard.setText(AnnotatedString(item.text)) },
                             onEdit = { viewModel.startEdit(item) },

@@ -20,6 +20,7 @@ import com.liftley.vodrop.domain.model.Transcription
 fun HistoryCard(
     transcription: Transcription,
     isPro: Boolean,
+    isLoading: Boolean = false,  // NEW: Prevent PRO badge flicker during loading
     isImproving: Boolean,
     onCopy: () -> Unit,
     onEdit: () -> Unit,
@@ -50,7 +51,7 @@ fun HistoryCard(
             Button(
                 onClick = onImproveWithAI,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = !isImproving,
+                enabled = !isImproving && !isLoading,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -65,7 +66,8 @@ fun HistoryCard(
                     Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Improve with AI", fontWeight = FontWeight.SemiBold)
-                    if (!isPro) {
+                    // FIXED: Only show PRO badge when NOT loading and NOT pro
+                    if (!isPro && !isLoading) {
                         Spacer(Modifier.width(6.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.tertiary,

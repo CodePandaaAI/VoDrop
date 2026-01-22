@@ -25,16 +25,32 @@ class MainViewModel(
     private var timerJob: Job? = null
 
     init {
+        observeAccessState()  // NEW: Observe auth state directly
         observeEngineState()
         observeRecordingStatus()
         loadHistory()
         initializeEngine()
     }
 
+    // Observe access state directly - faster updates, no intermediate hops
+    private fun observeAccessState() = viewModelScope.launch {
+        platformAuth.accessState.collect { access ->
+            update { copy(
+                isLoading = access.isLoading,
+                isLoggedIn = access.isLoggedIn,
+                isPro = access.isPro,
+                freeTrialsRemaining = access.freeTrialsRemaining,
+                // Show Firestore errors to user
+                error = if (access.error != null && error == null) access.error else error
+            ) }
+        }
+    }
+
     // Recording
     fun onRecordClick() {
         val s = _uiState.value
         when {
+            s.isLoading -> { /* Still loading, ignore */ }
             !s.isLoggedIn -> update { copy(error = "Please sign in first") }
             !s.canTranscribe -> update { copy(showUpgradeDialog = true) }
             s.recordingPhase == RecordingPhase.IDLE -> initializeEngine()
@@ -58,6 +74,7 @@ class MainViewModel(
         timerJob?.cancel()
         timerJob = null
     }
+
     private fun initializeEngine() = viewModelScope.launch {
         runCatching { sttEngine.initialize() }.onFailure { update { copy(error = it.message) } }
     }
@@ -70,8 +87,6 @@ class MainViewModel(
     }
 
     private var transcriptionJob: Job? = null
-
-    // ...
 
     fun cancelProcessing() {
         transcriptionJob?.cancel()
@@ -101,7 +116,7 @@ class MainViewModel(
                     }
                     is TranscribeAudioUseCase.UseCaseResult.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
                 }
-            }.onFailure { 
+            }.onFailure {
                 if (it !is kotlinx.coroutines.CancellationException) {
                     update { copy(recordingPhase = RecordingPhase.READY, error = it.message, progressMessage = "") }
                 }
@@ -113,14 +128,6 @@ class MainViewModel(
     fun selectMode(mode: TranscriptionMode) {
         if (mode == TranscriptionMode.WITH_AI_POLISH && !_uiState.value.isPro) showUpgradeDialog()
         else update { copy(transcriptionMode = mode) }
-    }
-
-    // Auth (synced from Activity)
-    fun setAuth(isLoggedIn: Boolean, isPro: Boolean, freeTrials: Int) {
-        val c = _uiState.value
-        if (c.isLoggedIn != isLoggedIn || c.isPro != isPro || c.freeTrialsRemaining != freeTrials) {
-            update { copy(isLoggedIn = isLoggedIn, isPro = isPro, freeTrialsRemaining = freeTrials, error = if (isLoggedIn && !c.isLoggedIn) null else error) }
-        }
     }
 
     // Dialogs

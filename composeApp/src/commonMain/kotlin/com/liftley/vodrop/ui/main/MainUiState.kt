@@ -12,6 +12,9 @@ enum class TranscriptionMode(val displayName: String) {
 }
 
 data class MainUiState(
+    // Loading state - prevents actions while auth is initializing
+    val isLoading: Boolean = true,
+
     // Recording
     val recordingPhase: RecordingPhase = RecordingPhase.IDLE,
     val transcriptionState: TranscriptionState = TranscriptionState.NotReady,
@@ -19,9 +22,9 @@ data class MainUiState(
     val progressMessage: String = "",
     val error: String? = null,
 
-    // ✅ NEW: Recording Timer & Amplitudes
+    // Recording Timer & Amplitudes
     val recordingDurationSeconds: Long = 0L,
-    val currentAmplitude: Float = -60f, // For visualizer
+    val currentAmplitude: Float = -60f,
 
     // History
     val history: List<Transcription> = emptyList(),
@@ -40,9 +43,11 @@ data class MainUiState(
     val freeTrialsRemaining: Int = 0,
     val improvingId: Long? = null
 ) {
-    val canTranscribe get() = isLoggedIn && (isPro || freeTrialsRemaining > 0)
+    // UPDATED: Check isLoading before allowing transcription
+    val canTranscribe get() = !isLoading && isLoggedIn && (isPro || freeTrialsRemaining > 0)
 
     val statusText get() = when {
+        isLoading -> "Loading..."
         !isLoggedIn -> "Sign in to start"
         isPro -> "Pro • Unlimited"
         freeTrialsRemaining > 0 -> "$freeTrialsRemaining trials left"

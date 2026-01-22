@@ -9,5 +9,6 @@ data class AccessState(
     val isPro: Boolean = false,
     val freeTrialsRemaining: Int = 0,
     val usedMinutesThisMonth: Int = 0,
-    val remainingMinutesThisMonth: Int = 120
+    val remainingMinutesThisMonth: Int = 120,
+    val error: String? = null
 )

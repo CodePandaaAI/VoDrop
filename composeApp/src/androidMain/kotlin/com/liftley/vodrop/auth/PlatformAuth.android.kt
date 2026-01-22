@@ -19,7 +19,6 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.liftley.vodrop.data.firestore.DeviceManager
 import com.liftley.vodrop.data.firestore.FirestoreManager
-import com.liftley.vodrop.data.firestore.UserData
 import com.revenuecat.purchases.CustomerInfo
 import com.revenuecat.purchases.LogLevel
 import com.revenuecat.purchases.Package
@@ -30,11 +29,14 @@ import com.revenuecat.purchases.awaitLogIn
 import com.revenuecat.purchases.awaitLogOut
 import com.revenuecat.purchases.awaitPurchase
 import com.revenuecat.purchases.interfaces.UpdatedCustomerInfoListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.ref.WeakReference
 import java.util.UUID
 
@@ -60,6 +62,7 @@ actual class PlatformAuth(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private var activityRef: WeakReference<Activity>? = null
     private var monthlyPackage: Package? = null
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val activity: Activity? get() = activityRef?.get()
 
@@ -88,51 +91,54 @@ actual class PlatformAuth(
             updateAccessStateFromRevenueCat(info)
         }
     }
-    /** Call this after Koin setup to load user state */
-    suspend fun initializeAccess() {
-        _accessState.value = _accessState.value.copy(isLoading = true)
 
+    /**
+     * Call this after Koin setup to load user state.
+     * OPTIMIZED: Updates state immediately, loads Firestore data in background.
+     */
+    fun initializeAccess() {
         val isLoggedIn = auth.currentUser != null
 
         if (!isLoggedIn) {
+            // Not logged in - immediately ready
             _accessState.value = AccessState(isLoading = false, isLoggedIn = false)
+            Log.d(TAG, "✅ Not logged in - ready immediately")
             return
         }
-
-//        // Check Pro status from RevenueCat
-//        val isPro = try {
-//            val info = Purchases.sharedInstance.awaitCustomerInfo()
-//            info.entitlements[AuthConfig.ENTITLEMENT_PRO]?.isActive == true
-//        } catch (e: Exception) {
-//            Log.e(TAG, "Error checking pro status", e)
-//            false
-//        }
 
         // ⚠️ TESTING: Force Pro status
         val isPro = true  // TODO: Revert before release
 
-        // Load user data from Firestore (may fail if database doesn't exist)
-        val deviceId = deviceManager.getDeviceId()
-        val userData: UserData? = try {
-            withTimeoutOrNull(15000) {  // 5 second timeout
-                firestoreManager.getOrCreateUserData(deviceId)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Firestore error: ${e.message}")
-            null
-        }
-
-        // UPDATE STATE EVEN IF FIRESTORE FAILS
+        // IMMEDIATELY update state so UI is responsive
         _accessState.value = AccessState(
-            isLoading = false,
-            isLoggedIn = true,  // ← Always set to true since auth.currentUser exists
+            isLoading = false,  // No longer blocking!
+            isLoggedIn = true,
             isPro = isPro,
-            freeTrialsRemaining = userData?.freeTrialsRemaining ?: 3,
-            usedMinutesThisMonth = userData?.getUsedMinutes() ?: 0,
-            remainingMinutesThisMonth = userData?.getRemainingMinutes() ?: 120
+            freeTrialsRemaining = 3  // Default, will refresh from Firestore
         )
+        Log.d(TAG, "✅ Logged in - UI ready, loading Firestore in background...")
 
-        Log.d(TAG, "✅ Initialized: ${_accessState.value}")
+        // BACKGROUND: Load Firestore data without blocking
+        backgroundScope.launch {
+            try {
+                val deviceId = deviceManager.getDeviceId()
+                val userData = firestoreManager.getOrCreateUserData(deviceId)
+
+                userData?.let {
+                    _accessState.value = _accessState.value.copy(
+                        freeTrialsRemaining = it.freeTrialsRemaining,
+                        usedMinutesThisMonth = it.getUsedMinutes(),
+                        remainingMinutesThisMonth = it.getRemainingMinutes()
+                    )
+                    Log.d(TAG, "✅ Firestore data loaded: ${it.freeTrialsRemaining} trials remaining")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Firestore error (non-blocking): ${e.message}")
+                _accessState.value = _accessState.value.copy(
+                    error = "Could not sync user data. Some features may be limited."
+                )
+            }
+        }
     }
 
     private fun updateAccessStateFromRevenueCat(info: CustomerInfo) {
@@ -238,7 +244,7 @@ actual class PlatformAuth(
                     Log.e(TAG, "RevenueCat login error", e)
                 }
 
-                // Load user data
+                // Load user data (non-blocking now)
                 initializeAccess()
 
                 Result.success(user)

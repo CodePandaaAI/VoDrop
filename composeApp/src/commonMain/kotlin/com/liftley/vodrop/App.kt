@@ -12,20 +12,13 @@ import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * App entry point - shared across all platforms.
- * Handles auth state synchronization and UI rendering.
+ * ViewModel handles auth state observation internally.
  */
 @Composable
 fun App() {
     val viewModel: MainViewModel = koinViewModel()
     val platformAuth: PlatformAuth = koinInject()
     val scope = rememberCoroutineScope()
-
-    val accessState by platformAuth.accessState.collectAsState()
-
-    // Single LaunchedEffect - sync access state to ViewModel
-    LaunchedEffect(accessState) {
-        viewModel.setAuth(accessState.isLoggedIn, accessState.isPro, accessState.freeTrialsRemaining)
-    }
 
     VoDropTheme {
         MainScreen(
