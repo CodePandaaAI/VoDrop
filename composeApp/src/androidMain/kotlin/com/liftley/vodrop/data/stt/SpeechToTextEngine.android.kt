@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import java.util.UUID
 
 private const val TAG = "CloudSTTEngine"
@@ -25,7 +24,8 @@ class CloudSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
     override val state: StateFlow<TranscriptionState> = _state.asStateFlow()
 
     private val functions: FirebaseFunctions by lazy { FirebaseFunctions.getInstance() }
-    private val storage: FirebaseStorage by inject()
+    // Using the default Firebase bucket as confirmed by user
+    private val storage: FirebaseStorage by lazy { FirebaseStorage.getInstance("gs://post-3424f.firebasestorage.app") }
 
     override suspend fun initialize() {
         _state.value = TranscriptionState.Ready

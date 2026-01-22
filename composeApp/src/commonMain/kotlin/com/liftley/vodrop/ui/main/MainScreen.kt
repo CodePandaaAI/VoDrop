@@ -96,6 +96,10 @@ fun MainScreen(
                         progressMessage = state.progressMessage,
                         error = state.error,
                         onRecordClick = viewModel::onRecordClick,
+                        onCancel = {
+                            if (state.recordingPhase == RecordingPhase.LISTENING) viewModel.onCancelRecording()
+                            else viewModel.cancelProcessing()
+                        },
                         onClearError = viewModel::clearError,
                         onCopy = { clipboard.setText(AnnotatedString(state.currentTranscription)) }
                     )

@@ -69,9 +69,19 @@ class MainViewModel(
         }.onFailure { update { copy(error = it.message) } }
     }
 
+    private var transcriptionJob: Job? = null
+
+    // ...
+
+    fun cancelProcessing() {
+        transcriptionJob?.cancel()
+        transcriptionJob = null
+        update { copy(recordingPhase = RecordingPhase.READY, progressMessage = "", error = "Cancelled") }
+    }
+
     private fun stopRecording() {
         update { copy(recordingPhase = RecordingPhase.PROCESSING) }
-        viewModelScope.launch {
+        transcriptionJob = viewModelScope.launch {
             runCatching {
                 val audio = audioRecorder.stopRecording()
                 val duration = AudioConfig.calculateDurationSeconds(audio)
@@ -91,7 +101,11 @@ class MainViewModel(
                     }
                     is TranscribeAudioUseCase.UseCaseResult.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
                 }
-            }.onFailure { update { copy(recordingPhase = RecordingPhase.READY, error = it.message, progressMessage = "") } }
+            }.onFailure { 
+                if (it !is kotlinx.coroutines.CancellationException) {
+                    update { copy(recordingPhase = RecordingPhase.READY, error = it.message, progressMessage = "") }
+                }
+            }
         }
     }
 

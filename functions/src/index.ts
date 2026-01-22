@@ -2,14 +2,22 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { v2 } from "@google-cloud/speech";
+import * as path from "path";
+import * as os from "os";
+import * as fs from "fs";
 
 admin.initializeApp();
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// 1. Point Client to the Mumbai Endpoint (asia-south1)
+// 1. Unified Location: US Multi-Region
+// This matches your manual setup: Recognizer in "us", Bucket in "us".
+const REGION = "us";
+const RECOGNIZER_ID = "vodrop-chirp";
+
+// 2. Specialized Client for US Multi-Region
 const speechClient = new v2.SpeechClient({
-  apiEndpoint: "asia-south1-speech.googleapis.com"
+  apiEndpoint: `${REGION}-speech.googleapis.com`, // us-speech.googleapis.com
 });
 
 export const transcribeChirp = onCall(
@@ -19,74 +27,135 @@ export const transcribeChirp = onCall(
     maxInstances: 10,
   },
   async (request) => {
-    // DEBUG LOG: This will show up in your Firebase Console Logs
-    console.log("v2.1: Starting Asia-South1 Transcription");
+    // DEBUG LOG
+    console.log(`[Start] Processing in ${REGION} (Multi-Region)`);
 
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be logged in");
 
     const gcsUri = request.data.gcsUri as string;
     if (!gcsUri) throw new HttpsError("invalid-argument", "Missing gcsUri");
 
-    const projectId = process.env.GCLOUD_PROJECT || "post-3424f";
+    const projectId = process.env.GCLOUD_PROJECT || "vodrop-app";
 
-    // Extract bucket name
+    // Extract bucket name from Input URI or fallback to the new US bucket
     const matches = gcsUri.match(/gs:\/\/([^\/]+)\//);
-    const bucketName = matches ? matches[1] : "post-3424f.firebasestorage.app";
+    const bucketName = matches ? matches[1] : "vodrop-audio-buc";
 
-    // Create unique output path
-    const outputPrefix = `transcripts/${Date.now()}_${Math.random().toString(36).substring(7)}/`;
-    const outputUri = `gs://${bucketName}/${outputPrefix}`;
+    // Define Recognizer Path (Strictly US Multi-Region)
+    const recognizer = `projects/${projectId}/locations/${REGION}/recognizers/${RECOGNIZER_ID}`;
 
-    // 2. CRITICAL: This string MUST say "asia-south1", NOT "global"
-    const recognizer = `projects/${projectId}/locations/asia-south1/recognizers/_`;
+    // Output Path (Same bucket, transcripts folder)
+    // NOTE: This is the request path, but the API might create a subdirectory.
+    const outputFileName = `${path.basename(gcsUri)}.json`;
+    const outputUri = `gs://${bucketName}/transcripts/${outputFileName}`;
 
     console.log(`Using Recognizer: ${recognizer}`);
 
-    const config = {
-      autoDecodingConfig: {},
-      model: "chirp_3",
-      languageCodes: ["en-US"],
-      features: {
-        enableAutomaticPunctuation: true,
-        enableWordTimeOffsets: false,
+    // Configuration for the Request
+    const recognitionRequest = {
+      recognizer: recognizer,
+      config: {
+        autoDecodingConfig: {},
+        model: "chirp_3", // User confirmed chirp_3 is created in 'us'
+        languageCodes: ["en-US"],
+        features: {
+          enableAutomaticPunctuation: true,
+          enableWordTimeOffsets: false,
+        },
       },
+      files: [{ uri: gcsUri }],
+      recognitionOutputConfig: {
+        gcsOutputConfig: { uri: outputUri }
+      }
     };
 
+    let tempLocalFile = null;
+
     try {
-      const [operation] = await speechClient.batchRecognize({
-        recognizer: recognizer,
-        config: config,
-        files: [{ uri: gcsUri }],
-        recognitionOutputConfig: {
-          gcsOutputConfig: { uri: outputUri }
-        }
-      });
+      // 3. Execute Transcription
+      const [operation] = await speechClient.batchRecognize(recognitionRequest);
+      const [response] = await operation.promise(); // Wait for completion
 
-      const [response] = await operation.promise();
+      // DEBUG: Log the full operation response
+      console.log(`[Operation Result]`, JSON.stringify(response, null, 2));
 
-      const resultPath = response.results?.[gcsUri]?.uri;
-      if (!resultPath) throw new HttpsError("internal", "No output file found.");
+      // 3.1 Check for Errors in the Response
+      // The response structure is: { results: { "gs://server/path": { uri: "...", error: { message: "..." } } } }
+      const fileResult = response.results?.[gcsUri];
 
-      // Download JSON
-      const resultFileName = resultPath.replace(`gs://${bucketName}/`, "");
+      if (fileResult?.error) {
+        console.error(`[Error] Cloud Speech API Error for file: ${fileResult.error.message}`);
+        throw new Error(`Cloud Speech API Error: ${fileResult.error.message}`);
+      }
+
+      // CRITICAL FIX: The API might create a subdirectory or use a different filename.
+      // We must use the 'uri' returned in 'cloudStorageResult'.
+      // Log Example: ".../transcripts/file.wav.json/file_transcript_hash.json"
+      const actualOutputUri = fileResult?.cloudStorageResult?.uri;
+
+      if (!actualOutputUri) {
+        throw new Error("Transcription finished but no output URI returned.");
+      }
+
+      console.log(`[Info] Actual Output URI: ${actualOutputUri}`);
+
+      // Parse the bucket and file path from the actual URI
+      // Format: gs://bucket-name/path/to/file.json
+      const uriMatches = actualOutputUri.match(/gs:\/\/([^\/]+)\/(.+)/);
+      if (!uriMatches) {
+        throw new Error(`Could not parse output URI: ${actualOutputUri}`);
+      }
+
+      // const resultBucketName = uriMatches[1]; // Should match bucketName
+      const resultFilePath = uriMatches[2];
+
+      // 4. Download Result
       const bucket = admin.storage().bucket(bucketName);
-      const file = bucket.file(resultFileName);
 
-      const [content] = await file.download();
-      const jsonResult = JSON.parse(content.toString());
+      // Retry loop for file consistency (up to 3 seconds)
+      let exists = false;
+      for (let i = 0; i < 3; i++) {
+        [exists] = await bucket.file(resultFilePath).exists();
+        if (exists) break;
+        console.log(`[Info] File not found yet, retrying... (${i + 1}/3)`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
 
-      // Extract Text
-      const transcription = jsonResult.results
-        .map((r: any) => r.alternatives?.[0]?.transcript || "")
+      if (!exists) {
+        console.error(`[Error] Output file does not exist at: gs://${bucketName}/${resultFilePath}`);
+        throw new Error(`Output file missing. Check logs for [Operation Result] to see why. Path: ${resultFilePath}`);
+      }
+
+      tempLocalFile = path.join(os.tmpdir(), "result.json");
+      await bucket.file(resultFilePath).download({ destination: tempLocalFile });
+
+      const fileContent = fs.readFileSync(tempLocalFile, "utf8");
+      const jsonResult = JSON.parse(fileContent);
+
+      // 5. Cleanup the Result File from Cloud Storage
+      // Clean up the actual file found
+      await bucket.file(resultFilePath).delete().catch(() => { });
+
+      // Optional: Try to clean up the parent directory if it was created by the API
+      // We know `outputFileName` was the directory name we asked for
+      // const parentDir = `transcripts/${outputFileName}`;
+      // await bucket.file(parentDir).delete().catch(() => {});
+
+      // 6. Extract Text
+      const transcription = (jsonResult.results || [])
+        .flatMap((r: any) => (r.alternatives || []).map((a: any) => a.transcript))
         .join(" ");
 
-      try { await file.delete(); } catch (e) { }
-
-      return { text: transcription.trim() };
+      return { text: transcription || "(No speech detected)" };
 
     } catch (error: any) {
-      console.error("Chirp Error:", error);
-      throw new HttpsError("internal", "Transcription failed: " + error.message);
+      console.error("[Error] Transcription failed:", error);
+      throw new HttpsError("internal", `Transcription failed: ${error.message}`);
+    } finally {
+      // 7. Local Cleanup
+      if (tempLocalFile && fs.existsSync(tempLocalFile)) {
+        fs.unlinkSync(tempLocalFile);
+      }
     }
   }
 );

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +35,7 @@ fun RecordingCard(
     progressMessage: String,
     error: String?,
     onRecordClick: () -> Unit,
+    onCancel: () -> Unit,
     onClearError: () -> Unit,
     onCopy: () -> Unit
 ) {
@@ -69,6 +71,17 @@ fun RecordingCard(
 
             Spacer(Modifier.height(40.dp))
             RecordButton(phase, onRecordClick, 160.dp)
+
+            // CANCEL BUTTON
+            if (phase == RecordingPhase.LISTENING || phase == RecordingPhase.PROCESSING) {
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = onCancel,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Cancel")
+                }
+            }
 
             if (currentTranscription.isNotEmpty()) {
                 Spacer(Modifier.height(40.dp))
