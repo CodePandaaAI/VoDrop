@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.liftley.vodrop.auth.PlatformAuth
 import com.liftley.vodrop.data.audio.*
-import com.liftley.vodrop.data.stt.*
 import com.liftley.vodrop.domain.model.Transcription
 import com.liftley.vodrop.domain.usecase.*
 import kotlinx.coroutines.Job
@@ -13,7 +12,6 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(
     private val audioRecorder: AudioRecorder,
-    private val sttEngine: SpeechToTextEngine,
     private val transcribeUseCase: TranscribeAudioUseCase,
     private val historyUseCase: ManageHistoryUseCase,
     private val platformAuth: PlatformAuth
@@ -22,85 +20,76 @@ class MainViewModel(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var timerJob: Job? = null
+    private var transcriptionJob: Job? = null
 
     init {
-        observeAccessState()  // NEW: Observe auth state directly
-        observeEngineState()
+        observeAccessState()
         observeRecordingStatus()
         loadHistory()
-        initializeEngine()
     }
 
-    // Observe access state directly - faster updates, no intermediate hops
     private fun observeAccessState() = viewModelScope.launch {
         platformAuth.accessState.collect { access ->
-            update { copy(
-                isLoading = access.isLoading,
-                isLoggedIn = access.isLoggedIn,
-                isPro = access.isPro,
-                freeTrialsRemaining = access.freeTrialsRemaining,
-                // Show Firestore errors to user
-                error = if (access.error != null && error == null) access.error else error
-            ) }
-        }
-    }
-
-    // Recording
-    fun onRecordClick() {
-        val s = _uiState.value
-        when {
-            s.isLoading -> { /* Still loading, ignore */ }
-            !s.isLoggedIn -> update { copy(error = "Please sign in first") }
-            !s.canTranscribe -> update { copy(showUpgradeDialog = true) }
-            s.recordingPhase == RecordingPhase.IDLE -> initializeEngine()
-            s.recordingPhase == RecordingPhase.READY -> startRecording()
-            s.recordingPhase == RecordingPhase.LISTENING -> stopRecording()
-            else -> { }
-        }
-    }
-
-    fun onCancelRecording() {
-        if (_uiState.value.recordingPhase == RecordingPhase.LISTENING) {
-            stopTimer()
-            viewModelScope.launch {
-                audioRecorder.cancelRecording()
-                update { copy(recordingPhase = RecordingPhase.READY, currentTranscription = "", recordingDurationSeconds = 0, currentAmplitude = -60f) }
+            update {
+                copy(
+                    isLoading = access.isLoading,
+                    isLoggedIn = access.isLoggedIn,
+                    isPro = access.isPro,
+                    freeTrialsRemaining = access.freeTrialsRemaining
+                )
             }
         }
     }
 
-    private fun stopTimer() {
-        timerJob?.cancel()
-        timerJob = null
+    // ---------------- Recording ----------------
+
+    fun onRecordClick() {
+        val s = _uiState.value
+        when {
+            s.isLoading -> { /* Ignore */ }
+            !s.isLoggedIn -> update { copy(micPhase = MicPhase.Error("Please sign in first")) }
+            !s.canTranscribe -> update { copy(showUpgradeDialog = true) }
+            s.micPhase is MicPhase.Idle -> startRecording()
+            s.micPhase is MicPhase.Recording -> stopRecording()
+            else -> { /* Ignore during processing */ }
+        }
     }
 
-    private fun initializeEngine() = viewModelScope.launch {
-        runCatching { sttEngine.initialize() }.onFailure { update { copy(error = it.message) } }
+    fun onCancelRecording() {
+        if (_uiState.value.micPhase is MicPhase.Recording) {
+            viewModelScope.launch {
+                audioRecorder.cancelRecording()
+                update { copy(micPhase = MicPhase.Idle, currentTranscription = "") }
+            }
+        }
+    }
+
+    fun cancelProcessing() {
+        transcriptionJob?.cancel()
+        transcriptionJob = null
+        update { copy(micPhase = MicPhase.Idle, progressMessage = "") }
     }
 
     private fun startRecording() = viewModelScope.launch {
         runCatching {
             audioRecorder.startRecording()
-            update { copy(recordingPhase = RecordingPhase.LISTENING, currentTranscription = "", error = null) }
-        }.onFailure { update { copy(error = it.message) } }
-    }
-
-    private var transcriptionJob: Job? = null
-
-    fun cancelProcessing() {
-        transcriptionJob?.cancel()
-        transcriptionJob = null
-        update { copy(recordingPhase = RecordingPhase.READY, progressMessage = "", error = "Cancelled") }
+            update { copy(micPhase = MicPhase.Recording, currentTranscription = "") }
+        }.onFailure {
+            update { copy(micPhase = MicPhase.Error(it.message ?: "Failed to start")) }
+        }
     }
 
     private fun stopRecording() {
-        update { copy(recordingPhase = RecordingPhase.PROCESSING) }
+        update { copy(micPhase = MicPhase.Processing) }
         transcriptionJob = viewModelScope.launch {
             runCatching {
                 val audio = audioRecorder.stopRecording()
                 val duration = AudioConfig.calculateDurationSeconds(audio)
-                if (duration < 0.5f) { update { copy(recordingPhase = RecordingPhase.READY, error = "Too short") }; return@launch }
+
+                if (duration < 0.5f) {
+                    update { copy(micPhase = MicPhase.Error("Too short")) }
+                    return@launch
+                }
 
                 val result = transcribeUseCase(
                     audioData = audio,
@@ -108,41 +97,51 @@ class MainViewModel(
                     onProgress = { update { copy(progressMessage = it) } },
                     onIntermediateResult = { text -> update { copy(currentTranscription = text) } }
                 )
+
                 when (result) {
                     is TranscribeAudioUseCase.UseCaseResult.Success -> {
-                        update { copy(currentTranscription = result.text, recordingPhase = RecordingPhase.READY, progressMessage = "") }
+                        update { copy(currentTranscription = result.text, micPhase = MicPhase.Idle, progressMessage = "") }
                         historyUseCase.saveTranscription(result.text)
-                        viewModelScope.launch { platformAuth.recordUsage(duration.toLong()) }
+                        platformAuth.recordUsage(duration.toLong())
                     }
-                    is TranscribeAudioUseCase.UseCaseResult.Error -> update { copy(recordingPhase = RecordingPhase.READY, error = result.message, progressMessage = "") }
+                    is TranscribeAudioUseCase.UseCaseResult.Error -> {
+                        update { copy(micPhase = MicPhase.Error(result.message), progressMessage = "") }
+                    }
                 }
             }.onFailure {
                 if (it !is kotlinx.coroutines.CancellationException) {
-                    update { copy(recordingPhase = RecordingPhase.READY, error = it.message, progressMessage = "") }
+                    update { copy(micPhase = MicPhase.Error(it.message ?: "Failed"), progressMessage = "") }
                 }
             }
         }
     }
 
-    // Mode
+    // ---------------- Mode ----------------
+
     fun selectMode(mode: TranscriptionMode) {
-        if (mode == TranscriptionMode.WITH_AI_POLISH && !_uiState.value.isPro) showUpgradeDialog()
-        else update { copy(transcriptionMode = mode) }
+        if (mode == TranscriptionMode.WITH_AI_POLISH && !_uiState.value.isPro) {
+            showUpgradeDialog()
+        } else {
+            update { copy(transcriptionMode = mode) }
+        }
     }
 
-    // Dialogs
+    // ---------------- Dialogs ----------------
+
     fun showUpgradeDialog() = update { copy(showUpgradeDialog = true) }
     fun hideUpgradeDialog() = update { copy(showUpgradeDialog = false) }
-    fun clearError() = update { copy(error = null) }
-    fun openDrawer() = update { copy(isDrawerOpen = true) }
-    fun closeDrawer() = update { copy(isDrawerOpen = false) }
+    fun clearError() = update { copy(micPhase = MicPhase.Idle) }
 
-    // History
+    // ---------------- History ----------------
+
     fun requestDelete(id: Long) = update { copy(deleteConfirmationId = id) }
     fun cancelDelete() = update { copy(deleteConfirmationId = null) }
     fun confirmDelete() {
         _uiState.value.deleteConfirmationId?.let { id ->
-            viewModelScope.launch { historyUseCase.deleteTranscription(id); update { copy(deleteConfirmationId = null) } }
+            viewModelScope.launch {
+                historyUseCase.deleteTranscription(id)
+                update { copy(deleteConfirmationId = null) }
+            }
         }
     }
 
@@ -151,34 +150,43 @@ class MainViewModel(
     fun cancelEdit() = update { copy(editingTranscription = null, editText = "") }
     fun saveEdit() {
         val t = _uiState.value.editingTranscription ?: return
-        viewModelScope.launch { historyUseCase.updateTranscription(t.id, _uiState.value.editText); update { copy(editingTranscription = null, editText = "") } }
+        viewModelScope.launch {
+            historyUseCase.updateTranscription(t.id, _uiState.value.editText)
+            update { copy(editingTranscription = null, editText = "") }
+        }
     }
 
     fun onImproveWithAI(t: Transcription) {
         if (!_uiState.value.isPro) { showUpgradeDialog(); return }
         update { copy(improvingId = t.id) }
         viewModelScope.launch {
-            try { transcribeUseCase.improveText(t.text)?.let { historyUseCase.updateTranscription(t.id, it) } }
-            finally { update { copy(improvingId = null) } }
+            try {
+                transcribeUseCase.improveText(t.text)?.let { historyUseCase.updateTranscription(t.id, it) }
+            } finally {
+                update { copy(improvingId = null) }
+            }
         }
     }
 
-    // Observers
-    private fun observeEngineState() = viewModelScope.launch {
-        sttEngine.state.collect { s ->
-            val phase = when (s) { is TranscriptionState.Ready -> RecordingPhase.READY; is TranscriptionState.Transcribing -> RecordingPhase.PROCESSING; else -> RecordingPhase.IDLE }
-            update { copy(transcriptionState = s, recordingPhase = phase) }
-        }
-    }
+    // ---------------- Observers ----------------
 
     private fun observeRecordingStatus() = viewModelScope.launch {
-        audioRecorder.status.collect { if (it is RecordingStatus.Error) update { copy(error = it.message, recordingPhase = RecordingPhase.READY) } }
+        audioRecorder.status.collect {
+            if (it is RecordingStatus.Error) {
+                update { copy(micPhase = MicPhase.Error(it.message)) }
+            }
+        }
     }
 
     private fun loadHistory() = viewModelScope.launch {
-        historyUseCase.getAllTranscriptions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()).collect { update { copy(history = it) } }
+        historyUseCase.getAllTranscriptions()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+            .collect { update { copy(history = it) } }
     }
 
     private inline fun update(block: MainUiState.() -> MainUiState) = _uiState.update(block)
-    override fun onCleared() { audioRecorder.release(); sttEngine.release() }
+
+    override fun onCleared() {
+        audioRecorder.release()
+    }
 }

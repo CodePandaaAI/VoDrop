@@ -1,10 +1,8 @@
 package com.liftley.vodrop.data.stt
 
+import com.liftley.vodrop.data.audio.AudioConfig
 import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -13,81 +11,61 @@ import java.nio.ByteOrder
 
 /**
  * JVM Speech-to-Text engine using Firebase Cloud Functions.
- * Cloud-only - no offline capability.
  */
 class JvmSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
 
-    private val _state = MutableStateFlow<TranscriptionState>(TranscriptionState.NotReady)
-    override val state: StateFlow<TranscriptionState> = _state.asStateFlow()
-
     private val firebaseFunctions: FirebaseFunctionsService by inject()
-
-    override suspend fun initialize() {
-        println("[JvmSTT] Cloud engine initialized")
-        _state.value = TranscriptionState.Ready
-    }
-
-    override fun isReady(): Boolean = _state.value is TranscriptionState.Ready
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
         if (audioData.isEmpty()) {
-            return TranscriptionResult.Error("No audio data provided")
+            return TranscriptionResult.Error("No audio data")
         }
 
         return withContext(Dispatchers.IO) {
             try {
-                _state.value = TranscriptionState.Transcribing
-                println("[JvmSTT] Sending ${audioData.size} bytes to Firebase...")
-
+                println("[JvmSTT] Transcribing ${audioData.size} bytes (48kHz)...")
                 val wavData = createWavFile(audioData)
                 val result = firebaseFunctions.transcribe(wavData)
 
-                _state.value = TranscriptionState.Ready
-
                 result.fold(
                     onSuccess = { text ->
-                        println("[JvmSTT] Transcription complete: ${text.take(50)}...")
-                        val cleanedText = RuleBasedTextCleanup.cleanup(text)
-                        TranscriptionResult.Success(cleanedText, 0L)
+                        println("[JvmSTT] Done: ${text.take(50)}...")
+                        TranscriptionResult.Success(RuleBasedTextCleanup.cleanup(text))
                     },
                     onFailure = { error ->
-                        println("[JvmSTT] Error: ${error.message}")
-                        TranscriptionResult.Error(error.message ?: "Transcription failed")
+                        TranscriptionResult.Error(error.message ?: "Failed")
                     }
                 )
             } catch (e: Exception) {
-                println("[JvmSTT] Exception: ${e.message}")
-                _state.value = TranscriptionState.Error(e.message ?: "Unknown error")
-                TranscriptionResult.Error("Transcription failed: ${e.message}")
+                TranscriptionResult.Error("Failed: ${e.message}")
             }
         }
     }
 
-    override fun release() {
-        println("[JvmSTT] Releasing resources")
-        _state.value = TranscriptionState.NotReady
-    }
-
+    /**
+     * Create WAV file from raw PCM using ByteBuffer.
+     * Format: 48kHz, mono, 16-bit PCM
+     */
     private fun createWavFile(pcmData: ByteArray): ByteArray {
-        val sampleRate = 16000
-        val channels = 1
-        val bitsPerSample = 16
+        val sampleRate = AudioConfig.SAMPLE_RATE        // 48000
+        val channels = AudioConfig.CHANNELS              // 1
+        val bitsPerSample = AudioConfig.BITS_PER_SAMPLE  // 16
         val byteRate = sampleRate * channels * bitsPerSample / 8
         val blockAlign = channels * bitsPerSample / 8
         val dataSize = pcmData.size
-        val fileSize = 36 + dataSize
 
-        val buffer = ByteBuffer.allocate(44 + pcmData.size).order(ByteOrder.LITTLE_ENDIAN)
+        val buffer = ByteBuffer.allocate(44 + dataSize)
+            .order(ByteOrder.LITTLE_ENDIAN)
 
         // RIFF header
-        buffer.put("RIFF".toByteArray())
-        buffer.putInt(fileSize)
-        buffer.put("WAVE".toByteArray())
+        buffer.put("RIFF".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(36 + dataSize)
+        buffer.put("WAVE".toByteArray(Charsets.US_ASCII))
 
         // fmt chunk
-        buffer.put("fmt ".toByteArray())
-        buffer.putInt(16) // Subchunk1 size
-        buffer.putShort(1) // Audio format (PCM)
+        buffer.put("fmt ".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(16)
+        buffer.putShort(1)
         buffer.putShort(channels.toShort())
         buffer.putInt(sampleRate)
         buffer.putInt(byteRate)
@@ -95,7 +73,7 @@ class JvmSpeechToTextEngine : SpeechToTextEngine, KoinComponent {
         buffer.putShort(bitsPerSample.toShort())
 
         // data chunk
-        buffer.put("data".toByteArray())
+        buffer.put("data".toByteArray(Charsets.US_ASCII))
         buffer.putInt(dataSize)
         buffer.put(pcmData)
 

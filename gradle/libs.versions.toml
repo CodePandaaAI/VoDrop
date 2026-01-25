@@ -8,6 +8,7 @@ androidx-appcompat = "1.7.0"
 androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
 firebase-bom = "33.7.0"
+kotlinxSerializationJson = "1.7.3"
 play-services-auth = "21.2.0"
 revenuecat = "8.6.0"
 
@@ -41,6 +42,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 
 # SQLDelight
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }

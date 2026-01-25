@@ -61,7 +61,6 @@ val appModule = module {
     viewModel {
         MainViewModel(
             audioRecorder = get(),
-            sttEngine = get(),
             transcribeUseCase = get(),
             historyUseCase = get(),
             platformAuth = get()

@@ -1,6 +1,7 @@
 package com.liftley.vodrop
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -24,7 +25,14 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) Toast.makeText(this, "Microphone permission required", Toast.LENGTH_LONG).show()
+        if (!granted) {
+            // If denied, show toast with settings hint
+            Toast.makeText(
+                this,
+                "Microphone denied. Enable in Settings → Apps → VoDrop",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,11 +41,19 @@ class MainActivity : ComponentActivity() {
         initKoin()
         platformAuth.setActivity(this)
         platformAuth.initialize()
-        requestMicPermission()
+
+        // Request permission at startup
+        requestMicPermissionIfNeeded()
 
         lifecycleScope.launch { platformAuth.initializeAccess() }
 
         setContent { App() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-check when returning from Settings
+        requestMicPermissionIfNeeded()
     }
 
     private fun initKoin() {
@@ -50,9 +66,9 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { /* Already started */ }
     }
 
-    private fun requestMicPermission() {
+    private fun requestMicPermissionIfNeeded() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED
+            != PackageManager.PERMISSION_GRANTED
         ) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }

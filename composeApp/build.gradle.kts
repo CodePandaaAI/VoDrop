@@ -85,7 +85,7 @@ kotlin {
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.datetime)
             implementation(libs.ktor.client.core)
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+            implementation(libs.kotlinx.serialization.json)
         }
 
         commonTest.dependencies {

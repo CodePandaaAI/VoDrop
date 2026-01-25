@@ -2,11 +2,14 @@ package com.liftley.vodrop.data.audio
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import androidx.core.content.ContextCompat
+import com.liftley.vodrop.service.RecordingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,9 +24,8 @@ import kotlin.math.log10
 
 /**
  * Android audio recorder using AudioRecord API
- * Produces 48kHz, mono, 16-bit PCM audio (Native Android Quality)
- *
- * OPTIMIZED: Pre-sized buffer to avoid reallocations
+ * Produces 16kHz, mono, 16-bit PCM audio
+ * Supports background recording via foreground service
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
@@ -37,9 +39,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     private var isCurrentlyRecording = false
     private var recordingThread: Thread? = null
 
-    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio at 48kHz
-    // 30s × 48000Hz × 2 bytes = 2,880,000 bytes (~2.8 MB)
-    // This prevents reallocations during recording which causes GC lag
     private var audioData = ByteArrayOutputStream(2_880_000)
 
     private val lock = Any()
@@ -54,7 +53,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             throw AudioRecorderException("Already recording")
         }
 
-        // Check permission
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) {
             throw AudioRecorderException("MICROPHONE permission not granted")
@@ -62,14 +60,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
         withContext(Dispatchers.IO) {
             try {
-                // Get strictly valid buffer size for 48kHz
                 val minBufferSize = AudioRecord.getMinBufferSize(
                     AudioConfig.SAMPLE_RATE,
                     CHANNEL_CONFIG,
                     AUDIO_FORMAT
                 )
 
-                // Safety: Ensure buffer is at least ~8ms of audio
                 val bufferSize = if (minBufferSize > 0) minBufferSize * 2 else 4096
 
                 synchronized(lock) {
@@ -87,14 +83,15 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                         }
                     }
 
-                    // ⚡ OPTIMIZED: Reset but keep the buffer capacity
                     audioData.reset()
                     isCurrentlyRecording = true
                     audioRecord?.startRecording()
                     _status.value = RecordingStatus.Recording(0f)
                 }
 
-                // Start recording thread
+                // START FOREGROUND SERVICE for background recording
+                startRecordingService()
+
                 recordingThread = thread(name = "VoDrop-AudioRecorder") {
                     val buffer = ByteArray(bufferSize)
 
@@ -107,7 +104,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                                 audioData.write(buffer, 0, bytesRead)
                             }
 
-                            // Calculate amplitude for UI feedback
                             val amplitude = calculateAmplitudeDb(buffer, bytesRead)
                             _status.value = RecordingStatus.Recording(amplitude)
                         } else if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION) {
@@ -145,9 +141,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 audioRecord?.stop()
                 audioRecord?.release()
                 audioRecord = null
-                audioData.reset() // Discard data
+                audioData.reset()
                 _status.value = RecordingStatus.Idle
             }
+
+            // STOP FOREGROUND SERVICE
+            stopRecordingService()
         }
     }
 
@@ -161,11 +160,10 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 isCurrentlyRecording = false
             }
 
-            // Wait for recording thread to finish
             recordingThread?.let { thread ->
                 thread.join(2000)
                 if (thread.isAlive) {
-                    thread.interrupt()  // Force interrupt if still running
+                    thread.interrupt()
                 }
             }
             recordingThread = null
@@ -178,8 +176,10 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 _status.value = RecordingStatus.Idle
 
                 val data = audioData.toByteArray()
-                // Reset buffer to free memory if needed, or keep for next time
-                // audioData.reset()
+
+                // STOP FOREGROUND SERVICE
+                stopRecordingService()
+
                 data
             }
         }
@@ -198,11 +198,31 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             audioData.reset()
             _status.value = RecordingStatus.Idle
         }
+        stopRecordingService()
     }
 
-    /**
-     * Calculate amplitude in dB from audio buffer for visual feedback
-     */
+    // ═══════════════════════════════════════════════════════════════
+    // FOREGROUND SERVICE MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun startRecordingService() {
+        val intent = Intent(context, RecordingService::class.java).apply {
+            action = RecordingService.ACTION_START
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    private fun stopRecordingService() {
+        val intent = Intent(context, RecordingService::class.java).apply {
+            action = RecordingService.ACTION_STOP
+        }
+        context.startService(intent)
+    }
+
     private fun calculateAmplitudeDb(buffer: ByteArray, bytesRead: Int): Float {
         var sum = 0.0
         val samples = bytesRead / 2

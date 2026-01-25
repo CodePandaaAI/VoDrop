@@ -20,24 +20,45 @@ fun AppDrawerContent(
     onSignOut: () -> Unit,
     onClose: () -> Unit
 ) {
-    ModalDrawerSheet(Modifier.fillMaxWidth(0.75f), drawerShape = MaterialTheme.shapes.extraLarge) {
+    ModalDrawerSheet(Modifier.fillMaxWidth(0.75f)) {
         Column(Modifier.padding(24.dp)) {
-            Text("VoDrop", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "VoDrop",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.height(24.dp))
 
             if (isLoggedIn) {
-                Surface(color = if (isPro) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = if (isPro) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(Icons.Rounded.Person, null, Modifier.size(40.dp))
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text(if (isPro) "Pro User" else "Free User", fontWeight = FontWeight.Bold)
-                            Text(statusText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (isPro) "Pro User" else "Free User",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                statusText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             } else {
-                Button(onClick = onSignIn, Modifier.fillMaxWidth().height(56.dp), shape = MaterialTheme.shapes.large) {
+                Button(
+                    onClick = onSignIn,
+                    Modifier.fillMaxWidth().height(56.dp),
+                    shape = MaterialTheme.shapes.large
+                ) {
                     Icon(Icons.Rounded.Person, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Sign In", fontWeight = FontWeight.Bold)
@@ -48,14 +69,35 @@ fun AppDrawerContent(
         HorizontalDivider(Modifier.padding(horizontal = 24.dp))
         Spacer(Modifier.height(16.dp))
 
-        NavigationDrawerItem({ Text("All Recordings") }, true, onClose, icon = { Icon(Icons.Rounded.Mic, null) }, modifier = Modifier.padding(horizontal = 12.dp))
-        NavigationDrawerItem({ Text("Settings") }, false, onClose, icon = { Icon(Icons.Rounded.Settings, null) }, modifier = Modifier.padding(horizontal = 12.dp))
+        NavigationDrawerItem(
+            { Text("All Recordings") },
+            true,
+            onClose,
+            icon = { Icon(Icons.Rounded.Mic, null) },
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
+        NavigationDrawerItem(
+            { Text("Settings") },
+            false,
+            onClose,
+            icon = { Icon(Icons.Rounded.Settings, null) },
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
 
         if (isLoggedIn) {
             Spacer(Modifier.weight(1f))
             HorizontalDivider(Modifier.padding(horizontal = 24.dp))
-            NavigationDrawerItem({ Text("Sign Out") }, false, onSignOut, icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },
-                modifier = Modifier.padding(12.dp), colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = MaterialTheme.colorScheme.error, unselectedIconColor = MaterialTheme.colorScheme.error))
+            NavigationDrawerItem(
+                { Text("Sign Out") },
+                false,
+                onSignOut,
+                icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },
+                modifier = Modifier.padding(12.dp),
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedTextColor = MaterialTheme.colorScheme.error,
+                    unselectedIconColor = MaterialTheme.colorScheme.error
+                )
+            )
             Spacer(Modifier.height(24.dp))
         }
     }
