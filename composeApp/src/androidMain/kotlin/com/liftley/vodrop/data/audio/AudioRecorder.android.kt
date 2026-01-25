@@ -69,7 +69,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 val bufferSize = if (minBufferSize > 0) minBufferSize * 2 else 4096
 
                 synchronized(lock) {
-                    @Suppress("MissingPermission")
                     audioRecord = AudioRecord(
                         MediaRecorder.AudioSource.MIC,
                         AudioConfig.SAMPLE_RATE,

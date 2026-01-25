@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
  * Format: 48kHz, mono, 16-bit PCM (Android Native Standard)
  */
 object AudioConfig {
-    const val SAMPLE_RATE = 48000  // 🚀 MAX QUALITY (Native Android Rate)
+    const val SAMPLE_RATE = 48000  // 🚀 MAX QUALITY
     const val CHANNELS = 1
     const val BITS_PER_SAMPLE = 16
     const val BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8

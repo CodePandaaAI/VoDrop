@@ -36,9 +36,6 @@ data class MainUiState(
     val isDrawerOpen: Boolean = false,
     val improvingId: Long? = null
 ) {
-    // Hackathon: Always can transcribe (no auth, no trials)
-    val canTranscribe get() = true
-
     val statusText get() = "VoDrop • Free"
 
     val error: String? get() = (micPhase as? MicPhase.Error)?.message

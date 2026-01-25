@@ -28,8 +28,7 @@ class MainViewModel(
     // ---------------- Recording ----------------
 
     fun onRecordClick() {
-        val s = _uiState.value
-        when (s.micPhase) {
+        when (uiState.value.micPhase) {
             is MicPhase.Idle -> startRecording()
             is MicPhase.Recording -> stopRecording()
             else -> { /* Ignore during processing */ }
@@ -37,7 +36,7 @@ class MainViewModel(
     }
 
     fun onCancelRecording() {
-        if (_uiState.value.micPhase is MicPhase.Recording) {
+        if (uiState.value.micPhase is MicPhase.Recording) {
             viewModelScope.launch {
                 audioRecorder.cancelRecording()
                 update { copy(micPhase = MicPhase.Idle, currentTranscription = "") }
