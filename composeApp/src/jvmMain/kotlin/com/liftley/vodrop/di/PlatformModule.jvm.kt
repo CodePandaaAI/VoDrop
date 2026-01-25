@@ -1,6 +1,5 @@
 package com.liftley.vodrop.di
 
-import com.liftley.vodrop.auth.PlatformAuth
 import com.liftley.vodrop.data.firebase.FirebaseFunctionsService
 import com.liftley.vodrop.data.firebase.JvmFirebaseFunctionsService
 import com.liftley.vodrop.data.llm.FirebaseTextCleanupService
@@ -20,7 +19,4 @@ val platformModule = module {
 
     // HTTP Client
     single { HttpClient() }
-
-    // PlatformAuth stub for desktop
-    single { PlatformAuth() }
 }

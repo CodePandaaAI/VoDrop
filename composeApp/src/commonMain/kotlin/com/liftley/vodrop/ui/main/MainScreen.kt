@@ -8,12 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.ui.components.history.EmptyState
 import com.liftley.vodrop.ui.components.history.HistoryCard
@@ -54,26 +51,16 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(
-    viewModel: MainViewModel,
-    onLoginClick: () -> Unit = {},
-    onSignOut: () -> Unit = {},
-    onPurchaseMonthly: () -> Unit = {},
-    monthlyPrice: String = "$2.99"
-) {
+fun MainScreen(viewModel: MainViewModel) {
     val state by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboardManager.current
 
-    val drawerState = rememberDrawerState(
-        initialValue = DrawerValue.Closed
-    )
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     HardwareBackHandler(drawerState.isOpen) {
         if (drawerState.isOpen) {
-            scope.launch {
-                drawerState.close()
-            }
+            scope.launch { drawerState.close() }
         }
     }
 
@@ -81,26 +68,8 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             AppDrawerContent(
-                isLoggedIn = state.isLoggedIn,
-                isPro = state.isPro,
                 statusText = state.statusText,
-                onSignIn = {
-                    scope.launch {
-                        drawerState.close()
-                        onLoginClick()
-                    }
-                },
-                onSignOut = {
-                    scope.launch {
-                        drawerState.close()
-                        onSignOut()
-                    }
-                },
-                onClose = {
-                    scope.launch {
-                        drawerState.close()
-                    }
-                }
+                onClose = { scope.launch { drawerState.close() } }
             )
         },
         gesturesEnabled = true
@@ -127,13 +96,10 @@ fun MainScreen(
                     },
                     navigationIcon = {
                         IconButton(
-                            onClick = {
-                                scope.launch { drawerState.open() }
-                            },
+                            onClick = { scope.launch { drawerState.open() } },
                             modifier = Modifier.height(48.dp),
                             colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surface)
-                        )
-                        {
+                        ) {
                             Icon(Icons.Default.Menu, "Menu")
                         }
                     },
@@ -141,16 +107,16 @@ fun MainScreen(
                         FilterChip(
                             selected = false,
                             onClick = {
-                                if (state.isPro) viewModel.selectMode(if (state.transcriptionMode == TranscriptionMode.STANDARD) TranscriptionMode.WITH_AI_POLISH else TranscriptionMode.STANDARD)
-                                else viewModel.showUpgradeDialog()
-                            },
-                            label = {
-                                Text(
-                                    state.transcriptionMode.displayName,
-                                    fontWeight = FontWeight.ExtraBold
+                                viewModel.selectMode(
+                                    if (state.transcriptionMode == TranscriptionMode.STANDARD)
+                                        TranscriptionMode.WITH_AI_POLISH
+                                    else
+                                        TranscriptionMode.STANDARD
                                 )
                             },
-                            enabled = state.isLoggedIn && !state.isLoading,
+                            label = {
+                                Text(state.transcriptionMode.displayName, fontWeight = FontWeight.ExtraBold)
+                            },
                             shape = MaterialTheme.shapes.extraLarge,
                             border = null,
                             colors = FilterChipDefaults.filterChipColors(
@@ -194,8 +160,6 @@ fun MainScreen(
                     items(state.history, key = { it.id }) { item ->
                         HistoryCard(
                             transcription = item,
-                            isPro = state.isPro,
-                            isLoading = state.isLoading,
                             isImproving = state.improvingId == item.id,
                             onCopy = { clipboard.setText(AnnotatedString(item.text)) },
                             onEdit = { viewModel.startEdit(item) },
@@ -208,7 +172,7 @@ fun MainScreen(
         }
     }
 
-    // Dialogs
+    // Delete Dialog
     if (state.deleteConfirmationId != null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
@@ -225,6 +189,7 @@ fun MainScreen(
         )
     }
 
+    // Edit Dialog
     state.editingTranscription?.let {
         AlertDialog(
             onDismissRequest = viewModel::cancelEdit,
@@ -239,35 +204,6 @@ fun MainScreen(
             },
             confirmButton = { Button(onClick = viewModel::saveEdit) { Text("Save") } },
             dismissButton = { TextButton(onClick = viewModel::cancelEdit) { Text("Cancel") } },
-            shape = MaterialTheme.shapes.extraLarge
-        )
-    }
-
-    if (state.showUpgradeDialog) {
-        AlertDialog(
-            onDismissRequest = viewModel::hideUpgradeDialog,
-            icon = {
-                Icon(
-                    Icons.Default.Person,
-                    null,
-                    Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = { Text("Unlock Pro", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "Unlimited transcriptions and AI Polish for $monthlyPrice/month.",
-                    textAlign = TextAlign.Center
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.hideUpgradeDialog(); onPurchaseMonthly() },
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                ) { Text("Upgrade Now") }
-            },
-            dismissButton = { TextButton(onClick = viewModel::hideUpgradeDialog) { Text("Maybe Later") } },
             shape = MaterialTheme.shapes.extraLarge
         )
     }

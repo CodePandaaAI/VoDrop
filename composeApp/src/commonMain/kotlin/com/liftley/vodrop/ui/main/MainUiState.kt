@@ -3,7 +3,7 @@ package com.liftley.vodrop.ui.main
 import com.liftley.vodrop.domain.model.Transcription
 
 /**
- * Unified microphone state - simple and clear
+ * Unified microphone state
  */
 sealed interface MicPhase {
     data object Idle : MicPhase
@@ -18,10 +18,7 @@ enum class TranscriptionMode(val displayName: String) {
 }
 
 data class MainUiState(
-    // Loading state - for auth initialization
-    val isLoading: Boolean = true,
-
-    // Mic state - unified, simple
+    // Mic state
     val micPhase: MicPhase = MicPhase.Idle,
 
     // Transcription output
@@ -36,24 +33,13 @@ data class MainUiState(
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
     val editText: String = "",
-    val showUpgradeDialog: Boolean = false,
-
-    // User
-    val isLoggedIn: Boolean = false,
-    val isPro: Boolean = false,
-    val freeTrialsRemaining: Int = 0,
+    val isDrawerOpen: Boolean = false,
     val improvingId: Long? = null
 ) {
-    val canTranscribe get() = !isLoading && isLoggedIn && (isPro || freeTrialsRemaining > 0)
+    // Hackathon: Always can transcribe (no auth, no trials)
+    val canTranscribe get() = true
 
-    val statusText get() = when {
-        isLoading -> "Loading..."
-        !isLoggedIn -> "Sign in to start"
-        isPro -> "Pro • Unlimited"
-        freeTrialsRemaining > 0 -> "$freeTrialsRemaining trials left"
-        else -> "Upgrade to Pro"
-    }
+    val statusText get() = "VoDrop • Free"
 
-    // Convenience for error messages
     val error: String? get() = (micPhase as? MicPhase.Error)?.message
 }

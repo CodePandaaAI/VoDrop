@@ -2,7 +2,6 @@ package com.liftley.vodrop.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.liftley.vodrop.auth.PlatformAuth
 import com.liftley.vodrop.data.audio.*
 import com.liftley.vodrop.domain.model.Transcription
 import com.liftley.vodrop.domain.usecase.*
@@ -13,8 +12,7 @@ import kotlinx.coroutines.launch
 class MainViewModel(
     private val audioRecorder: AudioRecorder,
     private val transcribeUseCase: TranscribeAudioUseCase,
-    private val historyUseCase: ManageHistoryUseCase,
-    private val platformAuth: PlatformAuth
+    private val historyUseCase: ManageHistoryUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiState())
@@ -23,34 +21,17 @@ class MainViewModel(
     private var transcriptionJob: Job? = null
 
     init {
-        observeAccessState()
         observeRecordingStatus()
         loadHistory()
-    }
-
-    private fun observeAccessState() = viewModelScope.launch {
-        platformAuth.accessState.collect { access ->
-            update {
-                copy(
-                    isLoading = access.isLoading,
-                    isLoggedIn = access.isLoggedIn,
-                    isPro = access.isPro,
-                    freeTrialsRemaining = access.freeTrialsRemaining
-                )
-            }
-        }
     }
 
     // ---------------- Recording ----------------
 
     fun onRecordClick() {
         val s = _uiState.value
-        when {
-            s.isLoading -> { /* Ignore */ }
-            !s.isLoggedIn -> update { copy(micPhase = MicPhase.Error("Please sign in first")) }
-            !s.canTranscribe -> update { copy(showUpgradeDialog = true) }
-            s.micPhase is MicPhase.Idle -> startRecording()
-            s.micPhase is MicPhase.Recording -> stopRecording()
+        when (s.micPhase) {
+            is MicPhase.Idle -> startRecording()
+            is MicPhase.Recording -> stopRecording()
             else -> { /* Ignore during processing */ }
         }
     }
@@ -102,7 +83,6 @@ class MainViewModel(
                     is TranscribeAudioUseCase.UseCaseResult.Success -> {
                         update { copy(currentTranscription = result.text, micPhase = MicPhase.Idle, progressMessage = "") }
                         historyUseCase.saveTranscription(result.text)
-                        platformAuth.recordUsage(duration.toLong())
                     }
                     is TranscribeAudioUseCase.UseCaseResult.Error -> {
                         update { copy(micPhase = MicPhase.Error(result.message), progressMessage = "") }
@@ -119,17 +99,11 @@ class MainViewModel(
     // ---------------- Mode ----------------
 
     fun selectMode(mode: TranscriptionMode) {
-        if (mode == TranscriptionMode.WITH_AI_POLISH && !_uiState.value.isPro) {
-            showUpgradeDialog()
-        } else {
-            update { copy(transcriptionMode = mode) }
-        }
+        update { copy(transcriptionMode = mode) }
     }
 
     // ---------------- Dialogs ----------------
 
-    fun showUpgradeDialog() = update { copy(showUpgradeDialog = true) }
-    fun hideUpgradeDialog() = update { copy(showUpgradeDialog = false) }
     fun clearError() = update { copy(micPhase = MicPhase.Idle) }
 
     // ---------------- History ----------------
@@ -157,7 +131,6 @@ class MainViewModel(
     }
 
     fun onImproveWithAI(t: Transcription) {
-        if (!_uiState.value.isPro) { showUpgradeDialog(); return }
         update { copy(improvingId = t.id) }
         viewModelScope.launch {
             try {
