@@ -2,6 +2,7 @@ package com.liftley.vodrop.data.firebase
 
 import android.util.Base64
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 
@@ -13,8 +14,28 @@ class AndroidFirebaseFunctionsService : FirebaseFunctionsService {
         FirebaseFunctions.getInstance()
     }
 
+    private val auth: FirebaseAuth by lazy {
+        FirebaseAuth.getInstance()
+    }
+
+    private suspend fun ensureAuth() {
+        if (auth.currentUser == null) {
+            Log.d(TAG, "No user signed in. Signing in anonymously...")
+            try {
+                auth.signInAnonymously().await()
+                Log.d(TAG, "Anonymous sign-in success. UID: ${auth.currentUser?.uid}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Anonymous sign-in failed", e)
+                // Continue anyway, maybe unauthenticated access is allowed on server
+                // but usually this fails if SDK expects it.
+            }
+        }
+    }
+
     override suspend fun transcribe(audioData: ByteArray): Result<String> {
         return try {
+            ensureAuth() // Authenticate first
+
             Log.d(TAG, "Calling transcribe function with ${audioData.size} bytes")
 
             // Convert audio to base64
@@ -43,6 +64,8 @@ class AndroidFirebaseFunctionsService : FirebaseFunctionsService {
 
     override suspend fun cleanupText(text: String, style: String): Result<String> {
         return try {
+            ensureAuth() // Authenticate first
+
             Log.d(TAG, "Calling cleanupText function, style: $style")
 
             val data = hashMapOf(

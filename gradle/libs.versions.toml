@@ -9,13 +9,7 @@ androidx-core = "1.15.0"
 androidx-espresso = "3.6.1"
 firebase-bom = "33.7.0"
 kotlinxSerializationJson = "1.7.3"
-play-services-auth = "21.2.0"
-revenuecat = "8.6.0"
-
-# Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
 androidx-lifecycle = "2.8.4"
-
-# Updated Compose to 1.8.0 for Kotlin 2.1.21 compatibility
 compose-multiplatform = "1.7.3"
 kotlin = "2.1.21"
 kotlinx-coroutines = "1.10.1"
@@ -24,9 +18,7 @@ sqldelight = "2.0.2"
 koin = "4.0.2"
 accompanist = "0.36.0"
 kotlinx-datetime = "0.6.1"
-whisper-jni = "1.7.1"
 ktor = "3.0.3"
-credentials = "1.5.0"
 
 
 [libraries]
@@ -74,17 +66,8 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 # Firebase
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
-play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 firebase-functions-ktx = { module = "com.google.firebase:firebase-functions-ktx" }
 firebase-storage-ktx = {module = "com.google.firebase:firebase-storage-ktx"}
-
-# Credential Manager (new Google Sign-In)
-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
-
-googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version = "1.1.1" }
-# RevenueCat
-revenuecat-purchases = { module = "com.revenuecat.purchases:purchases", version.ref = "revenuecat" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

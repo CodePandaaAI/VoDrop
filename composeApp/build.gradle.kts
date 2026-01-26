@@ -54,18 +54,8 @@ kotlin {
             // Firebase Auth
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.auth.ktx)
-            implementation(libs.play.services.auth)
-            implementation(libs.firebase.firestore.ktx)
             implementation(libs.firebase.functions.ktx)
             implementation(libs.firebase.storage.ktx)
-
-            // RevenueCat
-            implementation(libs.revenuecat.purchases)
-
-            // Credential Manager (new Google Sign-In)
-            implementation(libs.credentials)
-            implementation(libs.credentials.play.services)
-            implementation(libs.googleid)
         }
 
         commonMain.dependencies {
@@ -145,7 +135,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release") // ✅ Now this works!
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
