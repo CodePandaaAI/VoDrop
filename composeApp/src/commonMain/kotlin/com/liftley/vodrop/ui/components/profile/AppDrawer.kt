@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
@@ -24,7 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import com.liftley.vodrop.ui.components.reusable.ExpressiveIconButton
 import com.liftley.vodrop.ui.theme.Dimens
 
 @Composable
@@ -43,13 +42,20 @@ fun AppDrawerContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("VoDrop", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, "Close")
-                }
+                Text(
+                    "VoDrop",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                ExpressiveIconButton(
+                    onClick = onClose,
+                    imageVector = Icons.Default.Close,
+                    "Close",
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Dimens.small16))
 
             // Status
             Card(
@@ -57,12 +63,16 @@ fun AppDrawerContent(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Row(
-                    Modifier.padding(16.dp),
+                    Modifier.padding(Dimens.small16),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Info, null, Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Text(statusText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Default.Info, null, Modifier.size(Dimens.large24))
+                    Spacer(Modifier.width(Dimens.small16))
+                    Text(
+                        statusText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
