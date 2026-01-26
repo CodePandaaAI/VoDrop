@@ -1,6 +1,5 @@
 package com.liftley.vodrop.data.audio
 
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -33,10 +32,6 @@ sealed interface RecordingStatus {
  */
 interface AudioRecorder {
     val status: StateFlow<RecordingStatus>
-    
-    // Flow to listen for stop requests from external sources (Service/Notification)
-    val stopRequest: SharedFlow<Unit>
-
     suspend fun startRecording()
     suspend fun stopRecording(): ByteArray
 
@@ -45,14 +40,6 @@ interface AudioRecorder {
 
     fun isRecording(): Boolean
     fun release()
-
-    // Notification updates (default implementation does nothing)
-    fun notifyProcessing() {}
-    fun notifyPolishing() {}
-    fun notifyResult(text: String) {}
-    
-    // Method for Service to request stop
-    fun requestStopFromNotification() {}
 }
 
 class AudioRecorderException(

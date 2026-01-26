@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.liftley.vodrop.service.RecordingService
@@ -15,11 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,9 +39,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
     private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
     override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
-
-    private val _stopRequest = MutableSharedFlow<Unit>(replay = 0)
-    override val stopRequest: SharedFlow<Unit> = _stopRequest.asSharedFlow()
 
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
@@ -72,7 +65,8 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
         }
 
         // ✅ Start foreground service FIRST (on Main thread)
-        sendServiceAction(RecordingService.ACTION_START)
+        // Add EXTRA_FROM_RECORDER to tell Service NOT to call manager.startRecording() again
+        sendServiceAction(RecordingService.ACTION_START, fromRecorder = true)
 
         withContext(Dispatchers.IO) {
             val minBufferSize = AudioRecord.getMinBufferSize(
@@ -83,7 +77,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
             if (minBufferSize <= 0) {
                 // If we fail here, try to stop service
-                sendServiceAction(RecordingService.ACTION_STOP)
+                sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true)
                 throw AudioRecorderException("Device doesn't support this audio configuration")
             }
 
@@ -99,7 +93,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             ).also { record ->
                 if (record.state != AudioRecord.STATE_INITIALIZED) {
                     record.release()
-                    sendServiceAction(RecordingService.ACTION_STOP)
+                    sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true)
                     throw AudioRecorderException("Failed to initialize AudioRecord")
                 }
             }
@@ -143,7 +137,8 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     override suspend fun cancelRecording() {
         Log.d(TAG, "cancelRecording() called")
         stopInternal()
-        sendServiceAction(RecordingService.ACTION_STOP) 
+        // Send STOP action to service to reset notification
+        sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true) 
     }
 
     override suspend fun stopRecording(): ByteArray {
@@ -154,14 +149,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
         }
 
         val data = stopInternal()
-        
-        // Notify service we are stopped but processing starts (handled by VM)
-        // Here we can send ACTION_STOP to update UI to "Processing" immediately
-        // BUT the ViewModel will call notifyProcessing() which sends TRANSCRIPTION_START
-        // So we can arguably skip this or send it for safety.
-        // Let's send STOP to transition state cleanly.
-        sendServiceAction(RecordingService.ACTION_STOP)
-
         Log.d(TAG, "Recording stopped, ${data.size} bytes captured")
         return data
     }
@@ -193,39 +180,15 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // NOTIFICATION UPDATES & REQUESTS
-    // ═══════════════════════════════════════════════════════════════
-
-    override fun notifyProcessing() {
-        sendServiceAction(RecordingService.ACTION_TRANSCRIPTION_START)
-    }
-
-    override fun notifyPolishing() {
-        sendServiceAction(RecordingService.ACTION_POLISHING_START)
-    }
-
-    override fun notifyResult(text: String) {
-        val intent = Intent(context, RecordingService::class.java).apply {
-            action = RecordingService.ACTION_RESULT_READY
-            putExtra(RecordingService.EXTRA_RESULT_TEXT, text)
-        }
-        context.startForegroundService(intent)
-    }
-
-    override fun requestStopFromNotification() {
-        Log.d(TAG, "Stop requested from notification")
-        CoroutineScope(Dispatchers.Main).launch {
-             _stopRequest.emit(Unit)
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
     // HELPER METHODS
     // ═══════════════════════════════════════════════════════════════
 
-    private fun sendServiceAction(action: String) {
+    private fun sendServiceAction(action: String, fromRecorder: Boolean = false) {
         val intent = Intent(context, RecordingService::class.java).apply {
             this.action = action
+            if (fromRecorder) {
+                putExtra(RecordingService.EXTRA_FROM_RECORDER, true)
+            }
         }
         try {
             context.startForegroundService(intent)

@@ -5,6 +5,7 @@ import com.liftley.vodrop.domain.repository.TranscriptionRepositoryImpl
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.repository.TranscriptionRepository
 import com.liftley.vodrop.data.stt.createSpeechToTextEngine
+import com.liftley.vodrop.domain.manager.RecordingSessionManager
 import com.liftley.vodrop.domain.usecase.ManageHistoryUseCase
 import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
 import com.liftley.vodrop.ui.main.MainViewModel
@@ -30,12 +31,21 @@ val appModule = module {
     single { TranscribeAudioUseCase(get(), get()) }
     single { ManageHistoryUseCase(get()) }
 
-    // ═══════════ VIEWMODEL ═══════════
-    viewModel {
-        MainViewModel(
+    // ═══════════ MANAGERS (SSOT) ═══════════
+    single { 
+        RecordingSessionManager(
             audioRecorder = get(),
             transcribeUseCase = get(),
             historyUseCase = get()
+        ) 
+    }
+
+    // ═══════════ VIEWMODEL ═══════════
+    viewModel {
+        MainViewModel(
+            sessionManager = get(),
+            historyUseCase = get(),
+            transcribeUseCase = get()
         )
     }
 }

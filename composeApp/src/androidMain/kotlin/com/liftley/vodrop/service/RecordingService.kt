@@ -14,15 +14,18 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.liftley.vodrop.MainActivity
-import com.liftley.vodrop.data.audio.AudioRecorder
+import com.liftley.vodrop.domain.manager.RecordingSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 /**
- * Foreground service for background audio recording and notification management.
+ * Foreground service acting as a passive "Notification UI" for the RecordingSessionManager.
+ * It observes the central state and updates notifications accordingly.
+ * It forwards user intents (STOP) to the manager.
  */
 class RecordingService : Service() {
 
@@ -33,15 +36,13 @@ class RecordingService : Service() {
 
         const val ACTION_START = "com.liftley.vodrop.START_RECORDING"
         const val ACTION_STOP = "com.liftley.vodrop.STOP_RECORDING"
-        const val ACTION_TRANSCRIPTION_START = "com.liftley.vodrop.TRANSCRIPTION_START"
-        const val ACTION_POLISHING_START = "com.liftley.vodrop.POLISHING_START"
-        const val ACTION_RESULT_READY = "com.liftley.vodrop.RESULT_READY"
         const val ACTION_COPY_RESULT = "com.liftley.vodrop.COPY_RESULT"
 
         const val EXTRA_RESULT_TEXT = "extra_result_text"
+        const val EXTRA_FROM_RECORDER = "extra_started_by_recorder"
     }
 
-    private val audioRecorder: AudioRecorder by inject()
+    private val sessionManager: RecordingSessionManager by inject()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     private var recordingStartTime: Long = 0L
@@ -52,6 +53,7 @@ class RecordingService : Service() {
         super.onCreate()
         Log.d(TAG, "onCreate")
         createNotificationChannel()
+        observeSessionState()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,33 +61,28 @@ class RecordingService : Service() {
 
         when (intent?.action) {
             ACTION_START -> {
+                // Android requirement: Must call startForeground immediately
                 recordingStartTime = System.currentTimeMillis()
                 startForegroundWithNotification(createRecordingNotification())
+                
+                // Only trigger logic if NOT started by the Recorder itself (avoid recursion)
+                val startedByRecorder = intent.getBooleanExtra(EXTRA_FROM_RECORDER, false)
+                if (!startedByRecorder) {
+                    sessionManager.startRecording()
+                } else {
+                    Log.d(TAG, "Service started by AudioRecorder - skipping redundant start call")
+                }
             }
             ACTION_STOP -> {
-                // 1. Update notification immediately to provide feedback
-                updateNotification(createProcessingNotification("Stopping..."))
-                
-                // 2. Request the app/ViewModel to actually stop recording
-                audioRecorder.requestStopFromNotification()
-            }
-            ACTION_TRANSCRIPTION_START -> {
-                updateNotification(createProcessingNotification("Processing..."))
-            }
-            ACTION_POLISHING_START -> {
-                updateNotification(createProcessingNotification("AI Polishing..."))
-            }
-            ACTION_RESULT_READY -> {
-                val text = intent.getStringExtra(EXTRA_RESULT_TEXT) ?: "Transcription ready"
-                updateNotification(createResultNotification(text))
-                // Service stays alive until user actions
+                // Useer tapped Stop on notification
+                sessionManager.stopRecording() 
             }
             ACTION_COPY_RESULT -> {
                 val text = intent.getStringExtra(EXTRA_RESULT_TEXT) ?: ""
                 copyToClipboard(text)
 
-                // RESET to "Ready" state (Idle notification)
-                updateNotification(createIdleNotification())
+                // Reset Manager to Idle (Ready)
+                sessionManager.resetState()
             }
             else -> {
                 Log.w(TAG, "Unknown action: ${intent?.action}")
@@ -99,6 +96,32 @@ class RecordingService : Service() {
         super.onDestroy()
         scope.cancel()
     }
+
+    private fun observeSessionState() {
+        scope.launch {
+            sessionManager.state.collect { state ->
+                when (state) {
+                    is RecordingSessionManager.SessionState.Idle -> {
+                        updateNotification(createIdleNotification())
+                    }
+                    is RecordingSessionManager.SessionState.Recording -> {
+                        // Ensure we stand up functionality if resumed
+                    }
+                    is RecordingSessionManager.SessionState.Processing -> {
+                        updateNotification(createProcessingNotification(state.message))
+                    }
+                    is RecordingSessionManager.SessionState.Success -> {
+                        updateNotification(createResultNotification(state.text))
+                    }
+                    is RecordingSessionManager.SessionState.Error -> {
+                        updateNotification(createErrorNotification(state.message))
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Helpers ---
 
     private fun startForegroundWithNotification(notification: Notification) {
         try {
@@ -134,8 +157,6 @@ class RecordingService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(channel)
     }
-
-    // --- Notification Builders ---
 
     private fun createRecordingNotification(): Notification {
         val stopIntent = PendingIntent.getService(
@@ -176,8 +197,6 @@ class RecordingService : Service() {
 
     private fun createResultNotification(text: String): Notification {
         val openAppIntent = createOpenAppPendingIntent()
-        
-        // Truncate text for display
         val displayMessage = if (text.length > 50) text.take(50) + "..." else text
 
         val copyIntent = PendingIntent.getService(
@@ -195,8 +214,8 @@ class RecordingService : Service() {
             .setContentText(displayMessage)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(openAppIntent)
-            .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent)
-            .setOngoing(true) // Keep it sticking around until copied
+            .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent) // Using speak_now as copy icon placeholder
+            .setOngoing(true)
             .setAutoCancel(false) // Don't dismiss on click
             .setPriority(NotificationCompat.PRIORITY_HIGH) 
             .build()
@@ -218,6 +237,17 @@ class RecordingService : Service() {
             .setContentIntent(openAppIntent)
             .addAction(android.R.drawable.ic_media_play, "Start", startIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun createErrorNotification(message: String): Notification {
+         val openAppIntent = createOpenAppPendingIntent()
+         return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("Error")
+            .setContentText(message)
+            .setContentIntent(openAppIntent)
+            .setAutoCancel(true)
             .build()
     }
 
