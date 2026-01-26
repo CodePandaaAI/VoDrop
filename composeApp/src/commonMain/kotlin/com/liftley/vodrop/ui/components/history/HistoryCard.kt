@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CornerSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -29,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.domain.model.Transcription
+import com.liftley.vodrop.ui.components.reusable.HistoryCardButton
+import com.liftley.vodrop.ui.theme.Dimens
 
 @Composable
 fun HistoryCard(
@@ -41,16 +42,16 @@ fun HistoryCard(
 ) {
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(Dimens.small16)) {
             Text(
                 transcription.text,
                 style = MaterialTheme.typography.bodyLarge
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(Dimens.small16))
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -58,15 +59,14 @@ fun HistoryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Copy
-                Button(
-                    shape = MaterialTheme.shapes.large.copy(
-                        topEnd = CornerSize(8.dp),
-                        bottomStart = CornerSize(8.dp),
-                        bottomEnd = CornerSize(8.dp)
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topEnd = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8)
                     ),
-                    modifier = Modifier.weight(1f),
                     onClick = onCopy,
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surfaceContainer)
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         Icons.Rounded.ContentCopy,
@@ -76,30 +76,28 @@ fun HistoryCard(
                 }
 
                 // Edit
-                Button(
-                    shape = MaterialTheme.shapes.large.copy(
-                        topEnd = CornerSize(8.dp),
-                        bottomEnd = CornerSize(8.dp),
-                        topStart = CornerSize(8.dp),
-                        bottomStart = CornerSize(8.dp)
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topEnd = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8),
+                        topStart = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8)
                     ),
                     modifier = Modifier.weight(1f),
                     onClick = onEdit,
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surfaceContainer)
                 ) {
                     Icon(Icons.Rounded.Edit, "Edit", tint = MaterialTheme.colorScheme.onSurface)
                 }
 
                 // Delete
-                Button(
-                    shape = MaterialTheme.shapes.large.copy(
-                        topStart = CornerSize(8.dp),
-                        bottomStart = CornerSize(8.dp),
-                        bottomEnd = CornerSize(8.dp)
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topStart = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8)
                     ),
                     modifier = Modifier.weight(1f),
-                    onClick = onDelete,
-                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surfaceContainer)
+                    onClick = onDelete
                 ) {
                     Icon(Icons.Rounded.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
                 }
@@ -109,10 +107,11 @@ fun HistoryCard(
                 onClick = onImproveWithAI,
                 enabled = !isImproving,
                 colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surfaceContainer),
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isImproving) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(Dimens.large24), strokeWidth = 2.dp)
                 } else {
                     Icon(
                         Icons.Rounded.AutoAwesome,
@@ -120,7 +119,7 @@ fun HistoryCard(
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Dimens.small16))
                 Text("AI Polish", color = MaterialTheme.colorScheme.onSurface)
             }
         }
