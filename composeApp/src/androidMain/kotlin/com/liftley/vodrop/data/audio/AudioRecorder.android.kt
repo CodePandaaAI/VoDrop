@@ -8,24 +8,34 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.liftley.vodrop.service.RecordingService
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.ByteArrayOutputStream
-import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlin.math.log10
 
+private const val TAG = "AudioRecorder"
+
 /**
- * Android audio recorder using AudioRecord API
- * Produces 16kHz, mono, 16-bit PCM audio
- * Supports background recording via foreground service
+ * Android audio recorder using AudioRecord API.
+ * Produces 16kHz, mono, 16-bit PCM audio.
+ * Supports background recording via foreground service.
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
@@ -34,14 +44,14 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
     override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
 
+    private val _stopRequest = MutableSharedFlow<Unit>(replay = 0)
+    override val stopRequest: SharedFlow<Unit> = _stopRequest.asSharedFlow()
+
     private var audioRecord: AudioRecord? = null
-    @Volatile
-    private var isCurrentlyRecording = false
-    private var recordingThread: Thread? = null
+    private var recordingJob: Job? = null
 
-    private var audioData = ByteArrayOutputStream(2_880_000)
-
-    private val lock = Any()
+    // ~30 seconds at 16kHz mono 16-bit = 16000 * 2 * 30 = 960,000 bytes
+    private var audioData = ByteArrayOutputStream(960_000)
 
     companion object {
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -49,177 +59,179 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     }
 
     override suspend fun startRecording() {
-        if (isCurrentlyRecording) {
+        Log.d(TAG, "startRecording() called")
+
+        if (recordingJob?.isActive == true) {
             throw AudioRecorderException("Already recording")
         }
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED) {
+            != PackageManager.PERMISSION_GRANTED
+        ) {
             throw AudioRecorderException("MICROPHONE permission not granted")
         }
 
+        // ✅ Start foreground service FIRST (on Main thread)
+        sendServiceAction(RecordingService.ACTION_START)
+
         withContext(Dispatchers.IO) {
-            try {
-                val minBufferSize = AudioRecord.getMinBufferSize(
-                    AudioConfig.SAMPLE_RATE,
-                    CHANNEL_CONFIG,
-                    AUDIO_FORMAT
-                )
+            val minBufferSize = AudioRecord.getMinBufferSize(
+                AudioConfig.SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT
+            )
 
-                val bufferSize = if (minBufferSize > 0) minBufferSize * 2 else 4096
+            if (minBufferSize <= 0) {
+                // If we fail here, try to stop service
+                sendServiceAction(RecordingService.ACTION_STOP)
+                throw AudioRecorderException("Device doesn't support this audio configuration")
+            }
 
-                synchronized(lock) {
-                    audioRecord = AudioRecord(
-                        MediaRecorder.AudioSource.MIC,
-                        AudioConfig.SAMPLE_RATE,
-                        CHANNEL_CONFIG,
-                        AUDIO_FORMAT,
-                        bufferSize
-                    ).also { record ->
-                        if (record.state != AudioRecord.STATE_INITIALIZED) {
-                            record.release()
-                            throw AudioRecorderException("Failed to initialize AudioRecord")
-                        }
-                    }
+            val bufferSize = minBufferSize * 2
 
-                    audioData.reset()
-                    isCurrentlyRecording = true
-                    audioRecord?.startRecording()
-                    _status.value = RecordingStatus.Recording(0f)
+            @Suppress("MissingPermission")
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                AudioConfig.SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize
+            ).also { record ->
+                if (record.state != AudioRecord.STATE_INITIALIZED) {
+                    record.release()
+                    sendServiceAction(RecordingService.ACTION_STOP)
+                    throw AudioRecorderException("Failed to initialize AudioRecord")
                 }
+            }
 
-                // START FOREGROUND SERVICE for background recording
-                startRecordingService()
+            audioData.reset()
+            audioRecord?.startRecording()
+            _status.value = RecordingStatus.Recording(0f)
 
-                recordingThread = thread(name = "VoDrop-AudioRecorder") {
-                    val buffer = ByteArray(bufferSize)
+            Log.d(TAG, "Recording started at ${AudioConfig.SAMPLE_RATE}Hz")
 
-                    while (isCurrentlyRecording) {
-                        val record = audioRecord ?: break
-                        val bytesRead = record.read(buffer, 0, buffer.size)
+            // Launch recording coroutine
+            recordingJob = CoroutineScope(Dispatchers.IO).launch {
+                val buffer = ByteArray(bufferSize)
 
-                        if (bytesRead > 0) {
-                            synchronized(lock) {
-                                audioData.write(buffer, 0, bytesRead)
-                            }
+                while (isActive) {
+                    val record = audioRecord ?: break
+                    val bytesRead = record.read(buffer, 0, buffer.size)
 
+                    when {
+                        bytesRead > 0 -> {
+                            audioData.write(buffer, 0, bytesRead)
                             val amplitude = calculateAmplitudeDb(buffer, bytesRead)
                             _status.value = RecordingStatus.Recording(amplitude)
-                        } else if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION) {
+                        }
+
+                        bytesRead == AudioRecord.ERROR_INVALID_OPERATION -> {
                             _status.value = RecordingStatus.Error("Recording error: invalid operation")
-                            isCurrentlyRecording = false
                             break
-                        } else if (bytesRead == AudioRecord.ERROR_BAD_VALUE) {
+                        }
+
+                        bytesRead == AudioRecord.ERROR_BAD_VALUE -> {
                             _status.value = RecordingStatus.Error("Recording error: bad value")
-                            isCurrentlyRecording = false
                             break
                         }
                     }
                 }
-            } catch (e: SecurityException) {
-                _status.value = RecordingStatus.Error("Permission denied")
-                throw AudioRecorderException("Microphone permission denied", e)
-            } catch (e: Exception) {
-                _status.value = RecordingStatus.Error("Recording error: ${e.message}")
-                throw AudioRecorderException("Failed to start recording", e)
             }
         }
     }
 
     override suspend fun cancelRecording() {
-        if (!isCurrentlyRecording) return
-
-        withContext(Dispatchers.IO) {
-            synchronized(lock) {
-                isCurrentlyRecording = false
-            }
-            recordingThread?.join(2000)
-            recordingThread = null
-
-            synchronized(lock) {
-                audioRecord?.stop()
-                audioRecord?.release()
-                audioRecord = null
-                audioData.reset()
-                _status.value = RecordingStatus.Idle
-            }
-
-            // STOP FOREGROUND SERVICE
-            stopRecordingService()
-        }
+        Log.d(TAG, "cancelRecording() called")
+        stopInternal()
+        sendServiceAction(RecordingService.ACTION_STOP) 
     }
 
     override suspend fun stopRecording(): ByteArray {
-        if (!isCurrentlyRecording) {
+        Log.d(TAG, "stopRecording() called")
+
+        if (recordingJob?.isActive != true) {
             throw AudioRecorderException("Not currently recording")
         }
 
-        return withContext(Dispatchers.IO) {
-            synchronized(lock) {
-                isCurrentlyRecording = false
-            }
+        val data = stopInternal()
+        
+        // Notify service we are stopped but processing starts (handled by VM)
+        // Here we can send ACTION_STOP to update UI to "Processing" immediately
+        // BUT the ViewModel will call notifyProcessing() which sends TRANSCRIPTION_START
+        // So we can arguably skip this or send it for safety.
+        // Let's send STOP to transition state cleanly.
+        sendServiceAction(RecordingService.ACTION_STOP)
 
-            recordingThread?.let { thread ->
-                thread.join(2000)
-                if (thread.isAlive) {
-                    thread.interrupt()
-                }
-            }
-            recordingThread = null
-
-            synchronized(lock) {
-                audioRecord?.stop()
-                audioRecord?.release()
-                audioRecord = null
-
-                _status.value = RecordingStatus.Idle
-
-                val data = audioData.toByteArray()
-
-                // STOP FOREGROUND SERVICE
-                stopRecordingService()
-
-                data
-            }
-        }
+        Log.d(TAG, "Recording stopped, ${data.size} bytes captured")
+        return data
     }
 
-    override fun isRecording(): Boolean = isCurrentlyRecording
+    private suspend fun stopInternal(): ByteArray {
+        recordingJob?.cancelAndJoin()
+        recordingJob = null
 
-    override fun release() {
-        synchronized(lock) {
-            isCurrentlyRecording = false
-            recordingThread?.interrupt()
-            recordingThread = null
+        return withContext(Dispatchers.IO) {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            audioData.reset()
             _status.value = RecordingStatus.Idle
+            val data = audioData.toByteArray()
+            audioData.reset()
+            data
         }
-        stopRecordingService()
+    }
+
+    override fun isRecording(): Boolean = recordingJob?.isActive == true
+
+    override fun release() {
+        Log.d(TAG, "release() called")
+        CoroutineScope(Dispatchers.IO).launch {
+            stopInternal()
+        }
+        val intent = Intent(context, RecordingService::class.java)
+        context.stopService(intent)
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // FOREGROUND SERVICE MANAGEMENT
+    // NOTIFICATION UPDATES & REQUESTS
     // ═══════════════════════════════════════════════════════════════
 
-    private fun startRecordingService() {
+    override fun notifyProcessing() {
+        sendServiceAction(RecordingService.ACTION_TRANSCRIPTION_START)
+    }
+
+    override fun notifyPolishing() {
+        sendServiceAction(RecordingService.ACTION_POLISHING_START)
+    }
+
+    override fun notifyResult(text: String) {
         val intent = Intent(context, RecordingService::class.java).apply {
-            action = RecordingService.ACTION_START
+            action = RecordingService.ACTION_RESULT_READY
+            putExtra(RecordingService.EXTRA_RESULT_TEXT, text)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+    }
+
+    override fun requestStopFromNotification() {
+        Log.d(TAG, "Stop requested from notification")
+        CoroutineScope(Dispatchers.Main).launch {
+             _stopRequest.emit(Unit)
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // HELPER METHODS
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun sendServiceAction(action: String) {
+        val intent = Intent(context, RecordingService::class.java).apply {
+            this.action = action
+        }
+        try {
             context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send service action: $action", e)
         }
-    }
-
-    private fun stopRecordingService() {
-        val intent = Intent(context, RecordingService::class.java).apply {
-            action = RecordingService.ACTION_STOP
-        }
-        context.startService(intent)
     }
 
     private fun calculateAmplitudeDb(buffer: ByteArray, bytesRead: Int): Float {

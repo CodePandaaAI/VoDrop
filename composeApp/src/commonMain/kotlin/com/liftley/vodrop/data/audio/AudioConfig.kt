@@ -1,13 +1,14 @@
 package com.liftley.vodrop.data.audio
 
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Audio format specification for cloud transcription.
- * Format: 48kHz, mono, 16-bit PCM (Android Native Standard)
+ * Format: 16kHz, mono, 16-bit PCM (Standard for Speech Recognition)
  */
 object AudioConfig {
-    const val SAMPLE_RATE = 48000  // 🚀 MAX QUALITY
+    const val SAMPLE_RATE = 16000  // Standard for speech recognition
     const val CHANNELS = 1
     const val BITS_PER_SAMPLE = 16
     const val BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8
@@ -32,6 +33,10 @@ sealed interface RecordingStatus {
  */
 interface AudioRecorder {
     val status: StateFlow<RecordingStatus>
+    
+    // Flow to listen for stop requests from external sources (Service/Notification)
+    val stopRequest: SharedFlow<Unit>
+
     suspend fun startRecording()
     suspend fun stopRecording(): ByteArray
 
@@ -40,6 +45,14 @@ interface AudioRecorder {
 
     fun isRecording(): Boolean
     fun release()
+
+    // Notification updates (default implementation does nothing)
+    fun notifyProcessing() {}
+    fun notifyPolishing() {}
+    fun notifyResult(text: String) {}
+    
+    // Method for Service to request stop
+    fun requestStopFromNotification() {}
 }
 
 class AudioRecorderException(

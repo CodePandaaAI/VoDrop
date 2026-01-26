@@ -28,7 +28,8 @@ class MainViewModel(
     // ---------------- Recording ----------------
 
     fun onRecordClick() {
-        when (uiState.value.micPhase) {
+        val s = _uiState.value
+        when (s.micPhase) {
             is MicPhase.Idle -> startRecording()
             is MicPhase.Recording -> stopRecording()
             else -> { /* Ignore during processing */ }
@@ -36,7 +37,7 @@ class MainViewModel(
     }
 
     fun onCancelRecording() {
-        if (uiState.value.micPhase is MicPhase.Recording) {
+        if (_uiState.value.micPhase is MicPhase.Recording) {
             viewModelScope.launch {
                 audioRecorder.cancelRecording()
                 update { copy(micPhase = MicPhase.Idle, currentTranscription = "") }
@@ -61,6 +62,10 @@ class MainViewModel(
 
     private fun stopRecording() {
         update { copy(micPhase = MicPhase.Processing) }
+        
+        // Notify Service: Processing has started (Standard STT)
+        audioRecorder.notifyProcessing()
+
         transcriptionJob = viewModelScope.launch {
             runCatching {
                 val audio = audioRecorder.stopRecording()
@@ -75,13 +80,24 @@ class MainViewModel(
                     audioData = audio,
                     mode = _uiState.value.transcriptionMode,
                     onProgress = { update { copy(progressMessage = it) } },
-                    onIntermediateResult = { text -> update { copy(currentTranscription = text) } }
+                    onIntermediateResult = { text -> 
+                        update { copy(currentTranscription = text) }
+                        
+                        // If we are about to polish, notify service
+                        if (_uiState.value.transcriptionMode == TranscriptionMode.WITH_AI_POLISH 
+                            && text.length > 20) {
+                             audioRecorder.notifyPolishing()
+                        }
+                    }
                 )
 
                 when (result) {
                     is TranscribeAudioUseCase.UseCaseResult.Success -> {
                         update { copy(currentTranscription = result.text, micPhase = MicPhase.Idle, progressMessage = "") }
                         historyUseCase.saveTranscription(result.text)
+                        
+                        // Notify Service: Final Result
+                        audioRecorder.notifyResult(result.text)
                     }
                     is TranscribeAudioUseCase.UseCaseResult.Error -> {
                         update { copy(micPhase = MicPhase.Error(result.message), progressMessage = "") }

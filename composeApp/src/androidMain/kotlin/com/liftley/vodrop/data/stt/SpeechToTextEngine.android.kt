@@ -30,7 +30,7 @@ class CloudSpeechToTextEngine : SpeechToTextEngine {
                 val storageRef = storage.reference.child("uploads/$filename")
 
                 // 2. Upload to Firebase Storage
-                Log.d(TAG, "Uploading ${wavData.size} bytes (48kHz WAV)...")
+                Log.d(TAG, "Uploading ${wavData.size} bytes (${AudioConfig.SAMPLE_RATE}Hz WAV)...")
                 storageRef.putBytes(wavData).await()
 
                 // 3. Get GCS URI
@@ -61,11 +61,11 @@ class CloudSpeechToTextEngine : SpeechToTextEngine {
     }
 
     /**
-     * Create WAV file from raw PCM using ByteBuffer (correct byte ordering).
-     * Format: 48kHz, mono, 16-bit PCM
+     * // 1. Create WAV file (16kHz, mono, 16-bit) from raw PCM using ByteBuffer (correct byte ordering).
+     * Format: 16kHz, mono, 16-bit PCM
      */
     private fun createWavFile(pcmData: ByteArray): ByteArray {
-        val sampleRate = AudioConfig.SAMPLE_RATE        // 48000
+        val sampleRate = AudioConfig.SAMPLE_RATE        // 16000
         val channels = AudioConfig.CHANNELS              // 1
         val bitsPerSample = AudioConfig.BITS_PER_SAMPLE  // 16
         val byteRate = sampleRate * channels * bitsPerSample / 8
