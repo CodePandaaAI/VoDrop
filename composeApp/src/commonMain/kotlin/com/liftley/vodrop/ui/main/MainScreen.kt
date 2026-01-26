@@ -17,11 +17,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
@@ -46,6 +41,9 @@ import com.liftley.vodrop.ui.components.history.EmptyState
 import com.liftley.vodrop.ui.components.history.HistoryCard
 import com.liftley.vodrop.ui.components.profile.AppDrawerContent
 import com.liftley.vodrop.ui.components.recording.RecordingCard
+import com.liftley.vodrop.ui.components.reusable.ExpressiveIconButton
+import com.liftley.vodrop.ui.components.reusable.TranscriptionModeBox
+import com.liftley.vodrop.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
 
@@ -59,9 +57,7 @@ fun MainScreen(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
 
     HardwareBackHandler(drawerState.isOpen) {
-        if (drawerState.isOpen) {
-            scope.launch { drawerState.close() }
-        }
+        scope.launch { drawerState.close() }
     }
 
     ModalNavigationDrawer(
@@ -89,23 +85,22 @@ fun MainScreen(viewModel: MainViewModel) {
                         ) {
                             Text(
                                 "VoDrop",
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 16.dp)
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = Dimens.small16)
                             )
                         }
                     },
                     navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            modifier = Modifier.height(48.dp),
-                            colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Icon(Icons.Default.Menu, "Menu")
-                        }
+                        ExpressiveIconButton(
+                            onClick = {
+                                scope.launch { drawerState.open() }
+                            },
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Menu"
+                        )
                     },
                     actions = {
-                        FilterChip(
-                            selected = false,
+                        TranscriptionModeBox(
                             onClick = {
                                 viewModel.selectMode(
                                     if (state.transcriptionMode == TranscriptionMode.STANDARD)
@@ -113,25 +108,22 @@ fun MainScreen(viewModel: MainViewModel) {
                                     else
                                         TranscriptionMode.STANDARD
                                 )
-                            },
-                            label = {
-                                Text(state.transcriptionMode.displayName, fontWeight = FontWeight.ExtraBold)
-                            },
-                            shape = MaterialTheme.shapes.extraLarge,
-                            border = null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                            modifier = Modifier.height(48.dp).padding(end = 8.dp)
-                        )
+                            }
+                        ) {
+                            Text(
+                                state.transcriptionMode.displayName,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = Dimens.small16)
+                            )
+                        }
                     }
                 )
             }
         ) { padding ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                contentPadding = PaddingValues(vertical = Dimens.large24, horizontal = Dimens.small16),
+                verticalArrangement = Arrangement.spacedBy(Dimens.large24)
             ) {
                 item {
                     RecordingCard(

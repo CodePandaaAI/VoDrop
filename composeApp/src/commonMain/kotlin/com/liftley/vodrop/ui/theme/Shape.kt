@@ -6,9 +6,9 @@ import androidx.compose.ui.unit.dp
 
 // Expressive Design uses "Extra Large" rounding
 val VoDropShape = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(12.dp),      // Chips
-    medium = RoundedCornerShape(16.dp),     // Cards
-    large = RoundedCornerShape(28.dp),      // Dialogs / Large Cards
-    extraLarge = RoundedCornerShape(48.dp)  // Hero sections / Bottom Sheets
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(16.dp),
+    medium = RoundedCornerShape(24.dp),
+    large = RoundedCornerShape(32.dp),
+    extraLarge = RoundedCornerShape(48.dp)
 )

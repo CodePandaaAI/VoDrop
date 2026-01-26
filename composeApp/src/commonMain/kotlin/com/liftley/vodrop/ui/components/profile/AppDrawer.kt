@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.liftley.vodrop.ui.theme.Dimens
 
 @Composable
 fun AppDrawerContent(
@@ -32,9 +33,10 @@ fun AppDrawerContent(
     onClose: () -> Unit
 ) {
     ModalDrawerSheet(
+        modifier = Modifier.fillMaxWidth(0.75f),
         drawerContainerColor = MaterialTheme.colorScheme.surface
     ) {
-        Column(Modifier.fillMaxHeight().padding(24.dp)) {
+        Column(Modifier.fillMaxHeight().padding(Dimens.large24)) {
             // Header
             Row(
                 Modifier.fillMaxWidth(),

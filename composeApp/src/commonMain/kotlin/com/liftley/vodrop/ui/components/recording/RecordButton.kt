@@ -11,7 +11,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -22,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +41,7 @@ import com.liftley.vodrop.ui.main.MicPhase
 fun RecordButton(
     phase: MicPhase,
     onClick: () -> Unit,
-    size: Dp = 160.dp,
+    size: Dp = 144.dp,
     modifier: Modifier = Modifier
 ) {
     val isRecording = phase is MicPhase.Recording
@@ -67,14 +65,9 @@ fun RecordButton(
             .size(size)
             .clip(CircleShape)
             .background(buttonColor)
-            .then(
-                if (isEnabled) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick
-                    )
-                } else Modifier
+            .clickable(
+                enabled = isEnabled,
+                onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
