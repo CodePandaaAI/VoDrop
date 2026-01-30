@@ -74,6 +74,7 @@ fun MainScreen(viewModel: MainViewModel) {
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             topBar = {
                 TopAppBar(
+                    modifier = Modifier.padding(horizontal = Dimens.extraSmall8),
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                     title = {
                         Box(
@@ -113,7 +114,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             Text(
                                 state.transcriptionMode.displayName,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = Dimens.small16)
+                                modifier = Modifier.padding(horizontal = Dimens.extraSmall8)
                             )
                         }
                     }

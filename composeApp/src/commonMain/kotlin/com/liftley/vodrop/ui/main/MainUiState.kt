@@ -33,7 +33,6 @@ data class MainUiState(
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
     val editText: String = "",
-    val isDrawerOpen: Boolean = false,
     val improvingId: Long? = null
 ) {
     val statusText get() = "VoDrop • Free"

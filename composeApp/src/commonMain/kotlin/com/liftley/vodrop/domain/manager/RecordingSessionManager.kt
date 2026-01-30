@@ -29,7 +29,7 @@ class RecordingSessionManager(
     // Session State
     sealed interface SessionState {
         data object Idle : SessionState
-        data class Recording(val amplitude: Float) : SessionState
+        data object Recording : SessionState
         data class Processing(val message: String = "Processing...") : SessionState
         data class Success(val text: String) : SessionState
         data class Error(val message: String) : SessionState
@@ -50,7 +50,7 @@ class RecordingSessionManager(
             audioRecorder.status.collect { status ->
                 when (status) {
                     is RecordingStatus.Recording -> {
-                        _state.update { SessionState.Recording(status.amplitudeDb) }
+                        _state.update { SessionState.Recording }
                     }
                     is RecordingStatus.Error -> {
                         _state.update { SessionState.Error(status.message) }
@@ -69,13 +69,13 @@ class RecordingSessionManager(
         if (_state.value is SessionState.Recording) return
         
         // Optimistic update to prevent double-starts and race conditions
-        _state.update { SessionState.Recording(0f) }
+        _state.update { SessionState.Recording }
         
         scope.launch {
             try {
                 audioRecorder.startRecording()
                 // redundant update but confirms successful start
-                _state.update { SessionState.Recording(0f) }
+                _state.update { SessionState.Recording }
             } catch (e: Exception) {
                 _state.update { SessionState.Error(e.message ?: "Failed to start") }
             }

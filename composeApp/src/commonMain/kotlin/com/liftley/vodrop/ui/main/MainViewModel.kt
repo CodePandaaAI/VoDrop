@@ -16,8 +16,6 @@ import kotlinx.coroutines.launch
 class MainViewModel(
     private val sessionManager: RecordingSessionManager,
     private val historyUseCase: ManageHistoryUseCase,
-    // We still keep TranscribeUseCase for "Improve with AI" which is ad-hoc,
-    // but the main recording transcription is handled by sessionManager.
     private val transcribeUseCase: TranscribeAudioUseCase
 ) : ViewModel() {
 
@@ -32,8 +30,7 @@ class MainViewModel(
     // ---------------- Recording Actions ----------------
 
     fun onRecordClick() {
-        val s = _uiState.value
-        when (s.micPhase) {
+        when (_uiState.value.micPhase) {
             is MicPhase.Idle -> sessionManager.startRecording()
             is MicPhase.Recording -> sessionManager.stopRecording()
             else -> { /* Ignore during processing */ }

@@ -23,7 +23,7 @@ class ManageHistoryUseCase(
      * Save a new transcription with auto-generated timestamp
      */
     suspend fun saveTranscription(text: String) {
-        if (text.isNotBlank()) {
+        if (text.isNotBlank() && text != "(No speech detected)") {
             val timestamp = DateTimeUtils.formatCurrentTimestamp()
             repository.insertTranscription(timestamp, text)
         }

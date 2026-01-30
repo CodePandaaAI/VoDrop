@@ -149,7 +149,7 @@ class RecordingService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "VoDrop Recording",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Shows recording status and controls"
             setShowBadge(true)

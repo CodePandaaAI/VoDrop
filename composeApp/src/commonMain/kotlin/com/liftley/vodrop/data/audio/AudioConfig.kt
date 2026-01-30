@@ -23,7 +23,7 @@ object AudioConfig {
  */
 sealed interface RecordingStatus {
     data object Idle : RecordingStatus
-    data class Recording(val amplitudeDb: Float = 0f) : RecordingStatus
+    data object Recording : RecordingStatus
     data class Error(val message: String) : RecordingStatus
 }
 
@@ -39,7 +39,6 @@ interface AudioRecorder {
     suspend fun cancelRecording()
 
     fun isRecording(): Boolean
-    fun release()
 }
 
 class AudioRecorderException(

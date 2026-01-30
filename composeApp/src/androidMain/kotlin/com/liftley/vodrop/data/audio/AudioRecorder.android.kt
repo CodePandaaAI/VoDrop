@@ -17,14 +17,13 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.ByteArrayOutputStream
-import kotlin.math.abs
-import kotlin.math.log10
 
 private const val TAG = "AudioRecorder"
 
@@ -58,15 +57,16 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             throw AudioRecorderException("Already recording")
         }
 
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
         ) {
             throw AudioRecorderException("MICROPHONE permission not granted")
         }
 
         // ✅ Start foreground service FIRST (on Main thread)
-        // Add EXTRA_FROM_RECORDER to tell Service NOT to call manager.startRecording() again
-        sendServiceAction(RecordingService.ACTION_START, fromRecorder = true)
+        sendServiceAction(RecordingService.ACTION_START)
 
         withContext(Dispatchers.IO) {
             val minBufferSize = AudioRecord.getMinBufferSize(
@@ -77,13 +77,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
             if (minBufferSize <= 0) {
                 // If we fail here, try to stop service
-                sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true)
+                sendServiceAction(RecordingService.ACTION_STOP)
                 throw AudioRecorderException("Device doesn't support this audio configuration")
             }
 
             val bufferSize = minBufferSize * 2
 
-            @Suppress("MissingPermission")
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 AudioConfig.SAMPLE_RATE,
@@ -93,14 +92,14 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             ).also { record ->
                 if (record.state != AudioRecord.STATE_INITIALIZED) {
                     record.release()
-                    sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true)
+                    sendServiceAction(RecordingService.ACTION_STOP)
                     throw AudioRecorderException("Failed to initialize AudioRecord")
                 }
             }
 
             audioData.reset()
             audioRecord?.startRecording()
-            _status.value = RecordingStatus.Recording(0f)
+            _status.update { RecordingStatus.Recording }
 
             Log.d(TAG, "Recording started at ${AudioConfig.SAMPLE_RATE}Hz")
 
@@ -109,23 +108,21 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 val buffer = ByteArray(bufferSize)
 
                 while (isActive) {
-                    val record = audioRecord ?: break
-                    val bytesRead = record.read(buffer, 0, buffer.size)
+                    val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: break
 
                     when {
                         bytesRead > 0 -> {
                             audioData.write(buffer, 0, bytesRead)
-                            val amplitude = calculateAmplitudeDb(buffer, bytesRead)
-                            _status.value = RecordingStatus.Recording(amplitude)
+                            _status.update { RecordingStatus.Recording }
                         }
 
                         bytesRead == AudioRecord.ERROR_INVALID_OPERATION -> {
-                            _status.value = RecordingStatus.Error("Recording error: invalid operation")
+                            _status.update { RecordingStatus.Error("Recording error: invalid operation") }
                             break
                         }
 
                         bytesRead == AudioRecord.ERROR_BAD_VALUE -> {
-                            _status.value = RecordingStatus.Error("Recording error: bad value")
+                            _status.update { RecordingStatus.Error("Recording error: bad value") }
                             break
                         }
                     }
@@ -136,9 +133,8 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
     override suspend fun cancelRecording() {
         Log.d(TAG, "cancelRecording() called")
-        stopInternal()
-        // Send STOP action to service to reset notification
-        sendServiceAction(RecordingService.ACTION_STOP, fromRecorder = true) 
+        stopInternalWithoutData()  // Don't copy data
+        sendServiceAction(RecordingService.ACTION_STOP)
     }
 
     override suspend fun stopRecording(): ByteArray {
@@ -148,12 +144,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             throw AudioRecorderException("Not currently recording")
         }
 
-        val data = stopInternal()
+        val data = stopInternalWithData()  // Copy data
         Log.d(TAG, "Recording stopped, ${data.size} bytes captured")
         return data
     }
 
-    private suspend fun stopInternal(): ByteArray {
+    private suspend fun stopInternalWithData(): ByteArray {
         recordingJob?.cancelAndJoin()
         recordingJob = null
 
@@ -162,59 +158,40 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             audioRecord?.release()
             audioRecord = null
             _status.value = RecordingStatus.Idle
-            val data = audioData.toByteArray()
+            val data = audioData.toByteArray()  // Copy only when needed
             audioData.reset()
             data
         }
     }
 
-    override fun isRecording(): Boolean = recordingJob?.isActive == true
+    private suspend fun stopInternalWithoutData() {
+        recordingJob?.cancelAndJoin()
+        recordingJob = null
 
-    override fun release() {
-        Log.d(TAG, "release() called")
-        CoroutineScope(Dispatchers.IO).launch {
-            stopInternal()
+        withContext(Dispatchers.IO) {
+            audioRecord?.stop()
+            audioRecord?.release()
+            audioRecord = null
+            _status.value = RecordingStatus.Idle
+            audioData.reset()  // Just clear, don't copy
         }
-        val intent = Intent(context, RecordingService::class.java)
-        context.stopService(intent)
     }
+
+    override fun isRecording(): Boolean = recordingJob?.isActive == true
 
     // ═══════════════════════════════════════════════════════════════
     // HELPER METHODS
     // ═══════════════════════════════════════════════════════════════
 
-    private fun sendServiceAction(action: String, fromRecorder: Boolean = false) {
+    private fun sendServiceAction(action: String) {
         val intent = Intent(context, RecordingService::class.java).apply {
             this.action = action
-            if (fromRecorder) {
-                putExtra(RecordingService.EXTRA_FROM_RECORDER, true)
-            }
+            putExtra(RecordingService.EXTRA_FROM_RECORDER, true)
         }
         try {
             context.startForegroundService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send service action: $action", e)
-        }
-    }
-
-    private fun calculateAmplitudeDb(buffer: ByteArray, bytesRead: Int): Float {
-        var sum = 0.0
-        val samples = bytesRead / 2
-
-        for (i in 0 until samples) {
-            val low = buffer[i * 2].toInt() and 0xFF
-            val high = buffer[i * 2 + 1].toInt()
-            val sample = (high shl 8) or low
-            sum += abs(sample).toDouble()
-        }
-
-        val average = if (samples > 0) sum / samples else 0.0
-        val normalized = average / 32768.0
-
-        return if (normalized > 0.0001) {
-            (20 * log10(normalized)).toFloat().coerceIn(-60f, 0f)
-        } else {
-            -60f
         }
     }
 }
