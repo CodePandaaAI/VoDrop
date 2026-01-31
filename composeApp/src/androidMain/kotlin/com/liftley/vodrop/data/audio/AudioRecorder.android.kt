@@ -2,22 +2,16 @@ package com.liftley.vodrop.data.audio
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.liftley.vodrop.service.RecordingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,14 +24,13 @@ private const val TAG = "AudioRecorder"
 /**
  * Android audio recorder using AudioRecord API.
  * Produces 16kHz, mono, 16-bit PCM audio.
- * Supports background recording via foreground service.
+ * 
+ * PURE RECORDER: No state exposure, no service knowledge.
+ * Just records bytes and returns them.
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
     private val context: Context by inject()
-
-    private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
-    override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
 
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
@@ -65,9 +58,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             throw AudioRecorderException("MICROPHONE permission not granted")
         }
 
-        // ✅ Start foreground service FIRST (on Main thread)
-        sendServiceAction(RecordingService.ACTION_START)
-
         withContext(Dispatchers.IO) {
             val minBufferSize = AudioRecord.getMinBufferSize(
                 AudioConfig.SAMPLE_RATE,
@@ -76,8 +66,6 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             )
 
             if (minBufferSize <= 0) {
-                // If we fail here, try to stop service
-                sendServiceAction(RecordingService.ACTION_STOP)
                 throw AudioRecorderException("Device doesn't support this audio configuration")
             }
 
@@ -92,14 +80,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             ).also { record ->
                 if (record.state != AudioRecord.STATE_INITIALIZED) {
                     record.release()
-                    sendServiceAction(RecordingService.ACTION_STOP)
                     throw AudioRecorderException("Failed to initialize AudioRecord")
                 }
             }
 
             audioData.reset()
             audioRecord?.startRecording()
-            _status.update { RecordingStatus.Recording }
 
             Log.d(TAG, "Recording started at ${AudioConfig.SAMPLE_RATE}Hz")
 
@@ -113,16 +99,13 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                     when {
                         bytesRead > 0 -> {
                             audioData.write(buffer, 0, bytesRead)
-                            _status.update { RecordingStatus.Recording }
                         }
-
                         bytesRead == AudioRecord.ERROR_INVALID_OPERATION -> {
-                            _status.update { RecordingStatus.Error("Recording error: invalid operation") }
+                            Log.e(TAG, "Recording error: invalid operation")
                             break
                         }
-
                         bytesRead == AudioRecord.ERROR_BAD_VALUE -> {
-                            _status.update { RecordingStatus.Error("Recording error: bad value") }
+                            Log.e(TAG, "Recording error: bad value")
                             break
                         }
                     }
@@ -133,8 +116,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
     override suspend fun cancelRecording() {
         Log.d(TAG, "cancelRecording() called")
-        stopInternalWithoutData()  // Don't copy data
-        sendServiceAction(RecordingService.ACTION_STOP)
+        stopInternalWithoutData()
     }
 
     override suspend fun stopRecording(): ByteArray {
@@ -144,7 +126,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             throw AudioRecorderException("Not currently recording")
         }
 
-        val data = stopInternalWithData()  // Copy data
+        val data = stopInternalWithData()
         Log.d(TAG, "Recording stopped, ${data.size} bytes captured")
         return data
     }
@@ -157,8 +139,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            _status.value = RecordingStatus.Idle
-            val data = audioData.toByteArray()  // Copy only when needed
+            val data = audioData.toByteArray()
             audioData.reset()
             data
         }
@@ -172,28 +153,11 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            _status.value = RecordingStatus.Idle
-            audioData.reset()  // Just clear, don't copy
+            audioData.reset()
         }
     }
 
     override fun isRecording(): Boolean = recordingJob?.isActive == true
-
-    // ═══════════════════════════════════════════════════════════════
-    // HELPER METHODS
-    // ═══════════════════════════════════════════════════════════════
-
-    private fun sendServiceAction(action: String) {
-        val intent = Intent(context, RecordingService::class.java).apply {
-            this.action = action
-            putExtra(RecordingService.EXTRA_FROM_RECORDER, true)
-        }
-        try {
-            context.startForegroundService(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send service action: $action", e)
-        }
-    }
 }
 
 actual fun createAudioRecorder(): AudioRecorder = AndroidAudioRecorder()

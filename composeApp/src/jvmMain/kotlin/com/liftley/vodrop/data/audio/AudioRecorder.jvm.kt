@@ -1,9 +1,6 @@
 package com.liftley.vodrop.data.audio
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import javax.sound.sampled.AudioFormat
@@ -12,17 +9,14 @@ import javax.sound.sampled.DataLine
 import javax.sound.sampled.LineUnavailableException
 import javax.sound.sampled.TargetDataLine
 import kotlin.concurrent.thread
-import kotlin.math.abs
-import kotlin.math.log10
 
 /**
  * JVM/Desktop audio recorder using javax.sound API
- * Produces 16kHz, mono, 16-bit PCM audio for Whisper compatibility
+ * Produces 16kHz, mono, 16-bit PCM audio.
+ * 
+ * PURE RECORDER: No state exposure, just records and returns bytes.
  */
 class JvmAudioRecorder : AudioRecorder {
-
-    private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
-    override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
 
     private var targetLine: TargetDataLine? = null
     @Volatile
@@ -36,7 +30,7 @@ class JvmAudioRecorder : AudioRecorder {
         AudioConfig.BITS_PER_SAMPLE,        // Sample size: 16 bits
         AudioConfig.CHANNELS,               // Channels: mono
         true,                               // Signed
-        false                               // Little endian (required by Whisper)
+        false                               // Little endian
     )
 
     override suspend fun startRecording() {
@@ -61,7 +55,6 @@ class JvmAudioRecorder : AudioRecorder {
                     }
                     audioData.reset()
                     isCurrentlyRecording = true
-                    _status.value = RecordingStatus.Recording(0f)
                 }
 
                 // Start recording thread
@@ -77,18 +70,12 @@ class JvmAudioRecorder : AudioRecorder {
                             synchronized(lock) {
                                 audioData.write(buffer, 0, bytesRead)
                             }
-
-                            // Calculate amplitude for UI feedback
-                            val amplitude = calculateAmplitudeDb(buffer, bytesRead)
-                            _status.value = RecordingStatus.Recording(amplitude)
                         }
                     }
                 }
             } catch (e: LineUnavailableException) {
-                _status.value = RecordingStatus.Error("Microphone unavailable: ${e.message}")
                 throw AudioRecorderException("Microphone is unavailable or in use", e)
             } catch (e: Exception) {
-                _status.value = RecordingStatus.Error("Recording error: ${e.message}")
                 throw AudioRecorderException("Failed to start recording", e)
             }
         }
@@ -112,17 +99,12 @@ class JvmAudioRecorder : AudioRecorder {
                 targetLine?.stop()
                 targetLine?.close()
                 targetLine = null
-
-                _status.value = RecordingStatus.Idle
-
                 audioData.toByteArray()
             }
         }
     }
 
-    override fun isRecording(): Boolean = isCurrentlyRecording
-
-    override fun release() {
+    override suspend fun cancelRecording() {
         synchronized(lock) {
             isCurrentlyRecording = false
             recordingThread?.interrupt()
@@ -131,33 +113,10 @@ class JvmAudioRecorder : AudioRecorder {
             targetLine?.close()
             targetLine = null
             audioData.reset()
-            _status.value = RecordingStatus.Idle
         }
     }
 
-    /**
-     * Calculate amplitude in dB from audio buffer for visual feedback
-     */
-    private fun calculateAmplitudeDb(buffer: ByteArray, bytesRead: Int): Float {
-        var sum = 0.0
-        val samples = bytesRead / 2
-
-        for (i in 0 until samples) {
-            val low = buffer[i * 2].toInt() and 0xFF
-            val high = buffer[i * 2 + 1].toInt()
-            val sample = (high shl 8) or low
-            sum += abs(sample).toDouble()
-        }
-
-        val average = sum / samples
-        val normalized = average / 32768.0
-
-        return if (normalized > 0.0001) {
-            (20 * log10(normalized)).toFloat().coerceIn(-60f, 0f)
-        } else {
-            -60f
-        }
-    }
+    override fun isRecording(): Boolean = isCurrentlyRecording
 }
 
 actual fun createAudioRecorder(): AudioRecorder = JvmAudioRecorder()

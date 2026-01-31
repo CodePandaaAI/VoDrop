@@ -1,20 +1,18 @@
 package com.liftley.vodrop.domain.repository
 
-import app.cash.sqldelight.coroutines.asFlow
-import app.cash.sqldelight.coroutines.mapToList
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.model.Transcription
+import com.liftley.vodrop.util.DateTimeUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import kotlinx.coroutines.IO
 
-/**
- * SQLDelight implementation of TranscriptionRepository
- */
 class TranscriptionRepositoryImpl(
-    database: VoDropDatabase
+    private val database: VoDropDatabase
 ) : TranscriptionRepository {
 
     private val queries = database.transcriptionQueries
@@ -23,8 +21,8 @@ class TranscriptionRepositoryImpl(
         return queries.selectAll()
             .asFlow()
             .mapToList(Dispatchers.IO)
-            .map { list ->
-                list.map { entity ->
+            .map { entities ->
+                entities.map { entity ->
                     Transcription(
                         id = entity.id,
                         timestamp = entity.timestamp,
@@ -34,9 +32,16 @@ class TranscriptionRepositoryImpl(
             }
     }
 
-    override suspend fun insertTranscription(timestamp: String, text: String) {
-        withContext(Dispatchers.IO) {
+    override suspend fun saveTranscription(text: String): Boolean {
+        // Validation logic moved from UseCase
+        if (text.isBlank() || text == "(No speech detected)") {
+            return false
+        }
+
+        return withContext(Dispatchers.IO) {
+            val timestamp = DateTimeUtils.formatCurrentTimestamp()
             queries.insertItem(timestamp, text)
+            true
         }
     }
 

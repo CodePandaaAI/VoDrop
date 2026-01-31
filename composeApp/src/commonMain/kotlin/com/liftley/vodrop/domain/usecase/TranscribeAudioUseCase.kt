@@ -6,61 +6,54 @@ import com.liftley.vodrop.data.stt.SpeechToTextEngine
 import com.liftley.vodrop.data.stt.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
+/**
+ * Use case for transcribing audio with optional AI polish.
+ * Uses kotlin.Result consistently for all operations.
+ */
 class TranscribeAudioUseCase(
     private val sttEngine: SpeechToTextEngine,
     private val cleanupService: TextCleanupService
 ) {
-    // 1. Rename to avoid conflict with Kotlin's Result class
-    sealed interface UseCaseResult {
-        data class Success(val text: String, val usedAI: Boolean) : UseCaseResult
-        data class Error(val message: String) : UseCaseResult
-    }
-
+    /**
+     * Transcribe audio data with optional AI polish.
+     * @return Result with transcribed text or error
+     */
     suspend operator fun invoke(
         audioData: ByteArray,
         mode: TranscriptionMode,
         onProgress: (String) -> Unit = {},
         onIntermediateResult: (String) -> Unit = {}
-    ): UseCaseResult {
-        return try {
+    ): Result<String> {
+        return runCatching {
             onProgress("☁️ Transcribing...")
 
             when (val stt = sttEngine.transcribe(audioData)) {
                 is TranscriptionResult.Success -> {
                     var text = stt.text.trim()
-                    var usedAI = false
-
                     onIntermediateResult(text)
 
+                    // Apply AI polish if requested and text is substantial
                     if (mode == TranscriptionMode.WITH_AI_POLISH && text.length > 20) {
                         onProgress("✨ Polishing...")
-                        val polishResult = applyPolish(text)
-
-                        // 2. This fold works because applyPolish returns kotlin.Result<String>
-                        polishResult.fold(
-                            onSuccess = { polished ->
-                                text = polished
-                                usedAI = true
-                            },
-                            onFailure = { e ->
-                                println("Polish failed: ${e.message}")
-                            }
-                        )
+                        text = applyPolish(text).getOrDefault(text)
                     }
-                    UseCaseResult.Success(text, usedAI)
+                    
+                    text
                 }
-                is TranscriptionResult.Error -> UseCaseResult.Error(stt.message)
+                is TranscriptionResult.Error -> throw Exception(stt.message)
             }
-        } catch (e: Exception) {
-            UseCaseResult.Error("Error: ${e.message}")
         }
     }
 
+    /**
+     * Improve existing text with AI polish.
+     */
     suspend fun improveText(text: String): String? = applyPolish(text).getOrNull()
 
-    // 3. Explicitly return kotlin.Result<String>
     private suspend fun applyPolish(text: String): Result<String> {
-        if (!cleanupService.isAvailable()) return Result.failure(Exception("Service unavailable"))
+        if (!cleanupService.isAvailable()) {
+            return Result.failure(Exception("Service unavailable"))
+        }
         return cleanupService.cleanupText(text, CleanupStyle.INFORMAL)
     }
 }

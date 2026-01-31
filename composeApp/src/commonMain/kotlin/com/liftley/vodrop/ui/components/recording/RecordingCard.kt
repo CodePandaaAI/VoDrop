@@ -26,24 +26,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.ui.main.MicPhase
+import com.liftley.vodrop.domain.model.AppState
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * Recording card that displays based on AppState.
+ * Single source of truth - no internal state translation.
+ */
 @Composable
 fun RecordingCard(
-    phase: MicPhase,
-    currentTranscription: String,
-    progressMessage: String,
+    appState: AppState,
     onRecordClick: () -> Unit,
     onCancel: () -> Unit,
     onClearError: () -> Unit,
-    onCopy: () -> Unit
+    onCopy: (String) -> Unit
 ) {
-    // FIXED: Title/Subtitle are now simple. Details are shown in dedicated sections below.
-    val (title, subtitle) = when (phase) {
-        is MicPhase.Recording -> "Recording..." to "Tap to stop"
-        is MicPhase.Processing -> "Processing..." to "Please wait"
-        is MicPhase.Error -> "Error" to "Something went wrong"
+    val (title, subtitle) = when (appState) {
+        is AppState.Recording -> "Recording..." to "Tap to stop"
+        is AppState.Processing -> "Processing..." to "Please wait"
+        is AppState.Error -> "Error" to "Something went wrong"
+        is AppState.Success -> "Done!" to "Your transcription is ready"
         else -> "Ready" to "Tap to record"
     }
 
@@ -71,9 +73,10 @@ fun RecordingCard(
             )
 
             Spacer(Modifier.height(Dimens.huge48))
-            RecordButton(phase, onRecordClick, 144.dp)
+            RecordButton(appState, onRecordClick, 144.dp)
 
-            if (phase is MicPhase.Recording || phase is MicPhase.Processing) {
+            // Cancel button during recording or processing
+            if (appState is AppState.Recording || appState is AppState.Processing) {
                 Spacer(Modifier.height(Dimens.small16))
                 Button(
                     onClick = onCancel,
@@ -88,8 +91,8 @@ fun RecordingCard(
                 }
             }
 
-            // --- PROCESSING DETAILS (Single Source of Truth for progress) ---
-            if (phase is MicPhase.Processing) {
+            // Processing progress indicator
+            if (appState is AppState.Processing) {
                 Spacer(Modifier.height(Dimens.large24))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(
@@ -97,16 +100,15 @@ fun RecordingCard(
                         strokeWidth = 2.dp
                     )
                     Spacer(Modifier.width(Dimens.small16))
-                    // Show message if available, otherwise a default
                     Text(
-                        progressMessage.ifEmpty { "Working on it..." },
+                        appState.message.ifEmpty { "Working on it..." },
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
 
-            // --- TRANSCRIPTION RESULT ---
-            if (currentTranscription.isNotEmpty() && phase is MicPhase.Idle) {
+            // Success result display
+            if (appState is AppState.Success) {
                 Spacer(Modifier.height(Dimens.huge48))
                 Card(
                     Modifier.fillMaxWidth(),
@@ -121,12 +123,12 @@ fun RecordingCard(
                         verticalArrangement = Arrangement.spacedBy(Dimens.large24)
                     ) {
                         Text(
-                            currentTranscription,
+                            appState.text,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Button(
-                            onClick = onCopy,
+                            onClick = { onCopy(appState.text) },
                             Modifier.align(Alignment.End),
                             shape = MaterialTheme.shapes.medium,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -148,8 +150,8 @@ fun RecordingCard(
                 }
             }
 
-            // --- ERROR DETAILS (Single Source of Truth for error message) ---
-            if (phase is MicPhase.Error) {
+            // Error display
+            if (appState is AppState.Error) {
                 Spacer(Modifier.height(Dimens.large24))
                 Card(
                     Modifier.fillMaxWidth(),
@@ -161,7 +163,7 @@ fun RecordingCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            phase.message,
+                            appState.message,
                             Modifier.weight(1f),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

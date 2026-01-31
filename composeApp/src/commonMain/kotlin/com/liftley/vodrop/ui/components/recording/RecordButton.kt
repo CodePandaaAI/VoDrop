@@ -30,23 +30,22 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.ui.main.MicPhase
+import com.liftley.vodrop.domain.model.AppState
 
 /**
- * Record button with different states
- * Shows waveform animation during recording
+ * Record button with different states based on AppState.
+ * Shows waveform animation during recording.
  */
-
 @Composable
 fun RecordButton(
-    phase: MicPhase,
+    appState: AppState,
     onClick: () -> Unit,
     size: Dp = 144.dp,
     modifier: Modifier = Modifier
 ) {
-    val isRecording = phase is MicPhase.Recording
-    val isProcessing = phase is MicPhase.Processing
-    val isEnabled = phase !is MicPhase.Processing
+    val isRecording = appState is AppState.Recording
+    val isProcessing = appState is AppState.Processing
+    val isEnabled = appState !is AppState.Processing
 
     val buttonColor = when {
         isRecording -> MaterialTheme.colorScheme.error
@@ -92,8 +91,7 @@ fun RecordButton(
 }
 
 /**
- * Simple waveform visualization with 5 bars
- * Uses the Draw phase to stay recomposition-friendly
+ * Simple waveform visualization with 5 bars.
  */
 @Composable
 private fun SimpleWaveform(
@@ -133,8 +131,7 @@ private fun SimpleWaveform(
     )
 
     Canvas(
-        modifier = modifier
-            .size(80.dp, 40.dp) // Add explicit size here!
+        modifier = modifier.size(80.dp, 40.dp)
     ) {
         val barCount = 5
         val spacing = 8.dp.toPx()
@@ -143,7 +140,6 @@ private fun SimpleWaveform(
         val maxHeight = size.height
         val cornerRadius = CornerRadius(barWidth / 2, barWidth / 2)
 
-        // Mapping bars to the animations
         val heights = listOf(anim1, anim2, anim3, anim2, anim1)
 
         heights.forEachIndexed { index, heightFactor ->

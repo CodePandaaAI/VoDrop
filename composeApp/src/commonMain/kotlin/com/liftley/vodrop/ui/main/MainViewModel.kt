@@ -3,139 +3,116 @@ package com.liftley.vodrop.ui.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.liftley.vodrop.domain.manager.RecordingSessionManager
+import com.liftley.vodrop.domain.model.AppState
 import com.liftley.vodrop.domain.model.Transcription
-import com.liftley.vodrop.domain.usecase.ManageHistoryUseCase
+import com.liftley.vodrop.domain.repository.TranscriptionRepository
 import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 /**
- * MainViewModel is now a thin UI layer mapping SessionManager state to UI State.
- * All recording logic is handled by RecordingSessionManager.
+ * MainViewModel - thin UI layer.
+ * 
+ * Exposes two state flows:
+ * - appState: Recording/processing state from SessionManager (SSOT)
+ * - uiState: UI-specific state (dialogs, history, etc.)
+ * 
+ * NO state translation - appState is directly from SessionManager.
  */
 class MainViewModel(
     private val sessionManager: RecordingSessionManager,
-    private val historyUseCase: ManageHistoryUseCase,
+    private val historyRepository: TranscriptionRepository,
     private val transcribeUseCase: TranscribeAudioUseCase
 ) : ViewModel() {
 
+    /** 
+     * Recording state - DIRECT from SessionManager (no translation)
+     */
+    val appState: StateFlow<AppState> = sessionManager.state
+
+    /**
+     * UI-only state (dialogs, history, etc.)
+     */
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState = _uiState.asStateFlow()
 
+    /**
+     * Current transcription mode - read from SessionManager
+     */
+    val currentMode: TranscriptionMode get() = sessionManager.currentMode
+
     init {
-        observeSessionState()
         loadHistory()
     }
 
     // ---------------- Recording Actions ----------------
 
     fun onRecordClick() {
-        when (_uiState.value.micPhase) {
-            is MicPhase.Idle -> sessionManager.startRecording()
-            is MicPhase.Recording -> sessionManager.stopRecording()
+        when (appState.value) {
+            is AppState.Ready -> sessionManager.startRecording()
+            is AppState.Recording -> sessionManager.stopRecording()
             else -> { /* Ignore during processing */ }
         }
     }
 
-    fun onCancelRecording() {
-        if (_uiState.value.micPhase is MicPhase.Recording) {
-            sessionManager.cancelRecording()
-        }
-    }
-
-    fun cancelProcessing() {
-        sessionManager.cancelRecording() // Reuse cancel for stopping processing
+    /** Cancel recording or processing - one function for both */
+    fun onCancel() {
+        sessionManager.cancelRecording()
     }
 
     // ---------------- Mode ----------------
 
     fun selectMode(mode: TranscriptionMode) {
-        sessionManager.setMode(mode) // Update manager with mode
-        update { copy(transcriptionMode = mode) }
+        sessionManager.setMode(mode)
     }
 
-    // ---------------- Dialogs ----------------
+    // ---------------- Error ----------------
 
     fun clearError() {
         sessionManager.resetState()
-        update { copy(micPhase = MicPhase.Idle) }
     }
 
     // ---------------- History ----------------
-    // No changes here - purely database operations
-    
-    fun requestDelete(id: Long) = update { copy(deleteConfirmationId = id) }
-    fun cancelDelete() = update { copy(deleteConfirmationId = null) }
+
+    fun requestDelete(id: Long) = _uiState.update { it.copy(deleteConfirmationId = id) }
+    fun cancelDelete() = _uiState.update { it.copy(deleteConfirmationId = null) }
     fun confirmDelete() {
         _uiState.value.deleteConfirmationId?.let { id ->
             viewModelScope.launch {
-                historyUseCase.deleteTranscription(id)
-                update { copy(deleteConfirmationId = null) }
+                historyRepository.deleteTranscription(id)
+                _uiState.update { it.copy(deleteConfirmationId = null) }
             }
         }
     }
 
-    fun startEdit(t: Transcription) = update { copy(editingTranscription = t, editText = t.text) }
-    fun updateEditText(text: String) = update { copy(editText = text) }
-    fun cancelEdit() = update { copy(editingTranscription = null, editText = "") }
+    fun startEdit(t: Transcription) = _uiState.update { 
+        it.copy(editingTranscription = t, editText = t.text) 
+    }
+    fun updateEditText(text: String) = _uiState.update { it.copy(editText = text) }
+    fun cancelEdit() = _uiState.update { it.copy(editingTranscription = null, editText = "") }
     fun saveEdit() {
         val t = _uiState.value.editingTranscription ?: return
         viewModelScope.launch {
-            historyUseCase.updateTranscription(t.id, _uiState.value.editText)
-            update { copy(editingTranscription = null, editText = "") }
+            historyRepository.updateTranscription(t.id, _uiState.value.editText)
+            _uiState.update { it.copy(editingTranscription = null, editText = "") }
         }
     }
 
     fun onImproveWithAI(t: Transcription) {
-        update { copy(improvingId = t.id) }
+        _uiState.update { it.copy(improvingId = t.id) }
         viewModelScope.launch {
-            try {
-                transcribeUseCase.improveText(t.text)?.let { historyUseCase.updateTranscription(t.id, it) }
-            } finally {
-                update { copy(improvingId = null) }
+            transcribeUseCase.improveText(t.text)?.let { 
+                historyRepository.updateTranscription(t.id, it) 
             }
+            _uiState.update { it.copy(improvingId = null) }
         }
     }
 
-    // ---------------- Observers ----------------
-
-    private fun observeSessionState() = viewModelScope.launch {
-        sessionManager.state.collect { state ->
-            when (state) {
-                is RecordingSessionManager.SessionState.Idle -> {
-                    update { copy(micPhase = MicPhase.Idle, progressMessage = "") }
-                }
-                is RecordingSessionManager.SessionState.Recording -> {
-                    // Start amplitude feedback based on state updates if needed, 
-                    // or trust the Composable to just animate.
-                    // Real amplitude comes from separate flow if we want it,
-                    // but for now relying on state transition.
-                    update { copy(micPhase = MicPhase.Recording, currentTranscription = "") }
-                }
-                is RecordingSessionManager.SessionState.Processing -> {
-                    update { copy(micPhase = MicPhase.Processing, progressMessage = state.message) }
-                }
-                is RecordingSessionManager.SessionState.Success -> {
-                    update { copy(currentTranscription = state.text, micPhase = MicPhase.Idle, progressMessage = "") }
-                    // Transcription is already saved by Manager
-                }
-                is RecordingSessionManager.SessionState.Error -> {
-                    update { copy(micPhase = MicPhase.Error(state.message), progressMessage = "") }
-                }
-            }
-        }
-    }
+    // ---------------- Load History ----------------
 
     private fun loadHistory() = viewModelScope.launch {
-        historyUseCase.getAllTranscriptions()
+        historyRepository.getAllTranscriptions()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-            .collect { update { copy(history = it) } }
-    }
-
-    private inline fun update(block: MainUiState.() -> MainUiState) = _uiState.update(block)
-
-    override fun onCleared() {
-        // We do NOT stop the session manager on ViewModel clear because recording should continue in background!
-        // sessionManager.release() // Do not call this
+            .collect { history -> _uiState.update { it.copy(history = history) } }
     }
 }

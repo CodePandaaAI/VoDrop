@@ -46,13 +46,13 @@ import com.liftley.vodrop.ui.components.reusable.TranscriptionModeBox
 import com.liftley.vodrop.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
-    val state by viewModel.uiState.collectAsState()
+    val appState by viewModel.appState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    
     val clipboard = LocalClipboardManager.current
-
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -64,7 +64,7 @@ fun MainScreen(viewModel: MainViewModel) {
         drawerState = drawerState,
         drawerContent = {
             AppDrawerContent(
-                statusText = state.statusText,
+                statusText = uiState.statusText,
                 onClose = { scope.launch { drawerState.close() } }
             )
         },
@@ -93,9 +93,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     },
                     navigationIcon = {
                         ExpressiveIconButton(
-                            onClick = {
-                                scope.launch { drawerState.open() }
-                            },
+                            onClick = { scope.launch { drawerState.open() } },
                             imageVector = Icons.Default.Menu,
                             contentDescription = "Menu"
                         )
@@ -104,7 +102,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         TranscriptionModeBox(
                             onClick = {
                                 viewModel.selectMode(
-                                    if (state.transcriptionMode == TranscriptionMode.STANDARD)
+                                    if (viewModel.currentMode == TranscriptionMode.STANDARD)
                                         TranscriptionMode.WITH_AI_POLISH
                                     else
                                         TranscriptionMode.STANDARD
@@ -112,7 +110,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             }
                         ) {
                             Text(
-                                state.transcriptionMode.displayName,
+                                viewModel.currentMode.displayName,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(horizontal = Dimens.extraSmall8)
                             )
@@ -128,19 +126,14 @@ fun MainScreen(viewModel: MainViewModel) {
             ) {
                 item {
                     RecordingCard(
-                        phase = state.micPhase,
-                        currentTranscription = state.currentTranscription,
-                        progressMessage = state.progressMessage,
+                        appState = appState,
                         onRecordClick = viewModel::onRecordClick,
-                        onCancel = {
-                            if (state.micPhase is MicPhase.Recording) viewModel.onCancelRecording()
-                            else viewModel.cancelProcessing()
-                        },
+                        onCancel = viewModel::onCancel,
                         onClearError = viewModel::clearError,
-                        onCopy = { clipboard.setText(AnnotatedString(state.currentTranscription)) }
+                        onCopy = { text -> clipboard.setText(AnnotatedString(text)) }
                     )
                 }
-                if (state.history.isEmpty()) {
+                if (uiState.history.isEmpty()) {
                     item { EmptyState() }
                 } else {
                     item {
@@ -150,10 +143,10 @@ fun MainScreen(viewModel: MainViewModel) {
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    items(state.history, key = { it.id }) { item ->
+                    items(uiState.history, key = { it.id }) { item ->
                         HistoryCard(
                             transcription = item,
-                            isImproving = state.improvingId == item.id,
+                            isImproving = uiState.improvingId == item.id,
                             onCopy = { clipboard.setText(AnnotatedString(item.text)) },
                             onEdit = { viewModel.startEdit(item) },
                             onDelete = { viewModel.requestDelete(item.id) },
@@ -166,7 +159,7 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 
     // Delete Dialog
-    if (state.deleteConfirmationId != null) {
+    if (uiState.deleteConfirmationId != null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
             title = { Text("Delete?", fontWeight = FontWeight.Bold) },
@@ -183,13 +176,13 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 
     // Edit Dialog
-    state.editingTranscription?.let {
+    uiState.editingTranscription?.let {
         AlertDialog(
             onDismissRequest = viewModel::cancelEdit,
             title = { Text("Edit", fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
-                    state.editText,
+                    uiState.editText,
                     viewModel::updateEditText,
                     Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large

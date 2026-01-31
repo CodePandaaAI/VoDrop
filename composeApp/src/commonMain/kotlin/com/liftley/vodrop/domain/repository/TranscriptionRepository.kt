@@ -9,7 +9,13 @@ import kotlinx.coroutines.flow.Flow
  */
 interface TranscriptionRepository {
     fun getAllTranscriptions(): Flow<List<Transcription>>
-    suspend fun insertTranscription(timestamp: String, text: String)
+
+    /**
+     * Save a transcription with auto-generated timestamp.
+     * Returns true if saved, false if text was invalid.
+     */
+    suspend fun saveTranscription(text: String): Boolean
+
     suspend fun updateTranscription(id: Long, text: String)
     suspend fun deleteTranscription(id: Long)
 }

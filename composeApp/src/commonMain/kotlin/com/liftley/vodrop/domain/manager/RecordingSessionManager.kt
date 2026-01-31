@@ -2,9 +2,10 @@ package com.liftley.vodrop.domain.manager
 
 import com.liftley.vodrop.data.audio.AudioConfig
 import com.liftley.vodrop.data.audio.AudioRecorder
-import com.liftley.vodrop.data.audio.RecordingStatus
-import com.liftley.vodrop.domain.usecase.ManageHistoryUseCase
+import com.liftley.vodrop.domain.model.AppState
+import com.liftley.vodrop.domain.repository.TranscriptionRepository
 import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
+import com.liftley.vodrop.service.ServiceController
 import com.liftley.vodrop.ui.main.TranscriptionMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,74 +19,53 @@ import kotlinx.coroutines.launch
 
 /**
  * Single Source of Truth for Recording State.
- * Orchestrates AudioRecorder, TranscribeUseCase, and History.
- * Survives across UI lifecycle changes (Singleton).
+ * Orchestrates AudioRecorder, TranscribeUseCase, History, and Service.
+ * 
+ * NOTE: This is the ONLY class that holds and updates AppState.
+ * All other classes observe this state.
  */
 class RecordingSessionManager(
     private val audioRecorder: AudioRecorder,
     private val transcribeUseCase: TranscribeAudioUseCase,
-    private val historyUseCase: ManageHistoryUseCase
+    private val historyRepository: TranscriptionRepository,
+    private val serviceController: ServiceController
 ) {
-    // Session State
-    sealed interface SessionState {
-        data object Idle : SessionState
-        data object Recording : SessionState
-        data class Processing(val message: String = "Processing...") : SessionState
-        data class Success(val text: String) : SessionState
-        data class Error(val message: String) : SessionState
-    }
-
-    private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
-    val state: StateFlow<SessionState> = _state.asStateFlow()
+    private val _state = MutableStateFlow<AppState>(AppState.Ready)
+    val state: StateFlow<AppState> = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var transcriptionJob: Job? = null
-    
-    // Config
-    private var currentMode: TranscriptionMode = TranscriptionMode.STANDARD
 
-    init {
-        // Observe AudioRecorder status (e.g. amplitude updates)
-        scope.launch {
-            audioRecorder.status.collect { status ->
-                when (status) {
-                    is RecordingStatus.Recording -> {
-                        _state.update { SessionState.Recording }
-                    }
-                    is RecordingStatus.Error -> {
-                        _state.update { SessionState.Error(status.message) }
-                    }
-                    else -> { /* Idle handled manually */ }
-                }
-            }
-        }
-    }
+    // Config - public so UI can read current mode
+    var currentMode: TranscriptionMode = TranscriptionMode.STANDARD
+        private set
 
     fun setMode(mode: TranscriptionMode) {
         currentMode = mode
     }
 
     fun startRecording() {
-        if (_state.value is SessionState.Recording) return
-        
-        // Optimistic update to prevent double-starts and race conditions
-        _state.update { SessionState.Recording }
+        if (_state.value is AppState.Recording) return
+
+        _state.update { AppState.Recording }
         
         scope.launch {
             try {
+                // Start foreground service first (Android requirement)
+                serviceController.startForeground()
+                // Then start actual recording
                 audioRecorder.startRecording()
-                // redundant update but confirms successful start
-                _state.update { SessionState.Recording }
             } catch (e: Exception) {
-                _state.update { SessionState.Error(e.message ?: "Failed to start") }
+                _state.update { AppState.Error(e.message ?: "Failed to start recording") }
+                serviceController.stopForeground()
             }
         }
     }
 
     fun stopRecording() {
-        if (_state.value !is SessionState.Recording) return
+        if (_state.value !is AppState.Recording) return
 
-        _state.update { SessionState.Processing("Stopping...") }
+        _state.update { AppState.Processing("Stopping...") }
 
         transcriptionJob = scope.launch {
             try {
@@ -93,36 +73,32 @@ class RecordingSessionManager(
                 val duration = AudioConfig.calculateDurationSeconds(audioData)
 
                 if (duration < 0.5f) {
-                    _state.update { SessionState.Error("Recording too short") }
+                    _state.update { AppState.Error("Recording too short") }
                     return@launch
                 }
 
-                _state.update { SessionState.Processing("Transcribing...") }
+                _state.update { AppState.Processing("Transcribing...") }
 
-                // Call Transcribe UseCase
                 val result = transcribeUseCase(
                     audioData = audioData,
                     mode = currentMode,
-                    onProgress = { msg -> 
-                        _state.update { SessionState.Processing(msg) } 
+                    onProgress = { msg ->
+                        _state.update { AppState.Processing(msg) }
                     },
-                    onIntermediateResult = { text ->
-                        // Optional: update specific state if we want real-time preview
-                    }
+                    onIntermediateResult = { /* Optional: preview updates */ }
                 )
 
-                when (result) {
-                    is TranscribeAudioUseCase.UseCaseResult.Success -> {
-                        historyUseCase.saveTranscription(result.text)
-                        _state.update { SessionState.Success(result.text) }
+                result.fold(
+                    onSuccess = { text ->
+                        historyRepository.saveTranscription(text)
+                        _state.update { AppState.Success(text) }
+                    },
+                    onFailure = { e ->
+                        _state.update { AppState.Error(e.message ?: "Transcription failed") }
                     }
-                    is TranscribeAudioUseCase.UseCaseResult.Error -> {
-                        _state.update { SessionState.Error(result.message) }
-                    }
-                }
+                )
             } catch (e: Exception) {
-                // Handle crashes if recorder fails or logic errors
-                _state.update { SessionState.Error(e.message ?: "Transcription failed") }
+                _state.update { AppState.Error(e.message ?: "Transcription failed") }
             }
         }
     }
@@ -132,14 +108,16 @@ class RecordingSessionManager(
             try {
                 audioRecorder.cancelRecording()
                 transcriptionJob?.cancel()
-                _state.update { SessionState.Idle }
             } catch (e: Exception) {
-                _state.update { SessionState.Idle } // Force idle regardless
+                // Ignore errors during cancel
+            } finally {
+                _state.update { AppState.Ready }
+                serviceController.stopForeground()
             }
         }
     }
 
     fun resetState() {
-        _state.update { SessionState.Idle }
+        _state.update { AppState.Ready }
     }
 }

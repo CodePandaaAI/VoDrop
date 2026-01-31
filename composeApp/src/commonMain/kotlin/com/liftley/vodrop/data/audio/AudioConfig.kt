@@ -1,7 +1,5 @@
 package com.liftley.vodrop.data.audio
 
-import kotlinx.coroutines.flow.StateFlow
-
 /**
  * Audio format specification for cloud transcription.
  * Format: 16kHz, mono, 16-bit PCM (Standard for Speech Recognition)
@@ -19,25 +17,13 @@ object AudioConfig {
 }
 
 /**
- * Recording state with amplitude for UI feedback
- */
-sealed interface RecordingStatus {
-    data object Idle : RecordingStatus
-    data object Recording : RecordingStatus
-    data class Error(val message: String) : RecordingStatus
-}
-
-/**
  * Platform-agnostic audio recorder interface.
+ * PURE RECORDER: Just records bytes. No state, no service knowledge.
  */
 interface AudioRecorder {
-    val status: StateFlow<RecordingStatus>
     suspend fun startRecording()
     suspend fun stopRecording(): ByteArray
-
-    /** Stops recording and discards data */
     suspend fun cancelRecording()
-
     fun isRecording(): Boolean
 }
 

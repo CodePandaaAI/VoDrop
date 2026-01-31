@@ -5,8 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -16,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.liftley.vodrop.MainActivity
 import com.liftley.vodrop.domain.manager.RecordingSessionManager
+import com.liftley.vodrop.domain.model.AppState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,9 +23,12 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 /**
- * Foreground service acting as a passive "Notification UI" for the RecordingSessionManager.
- * It observes the central state and updates notifications accordingly.
- * It forwards user intents (STOP) to the manager.
+ * Foreground service - PURE OBSERVER of RecordingSessionManager state.
+ * 
+ * This service:
+ * - Shows notifications based on AppState
+ * - DOES NOT command SessionManager (that's BroadcastReceiver's job)
+ * - Only purpose is to keep the app alive in background
  */
 class RecordingService : Service() {
 
@@ -34,18 +36,12 @@ class RecordingService : Service() {
         private const val TAG = "RecordingService"
         const val CHANNEL_ID = "vodrop_recording_channel"
         const val NOTIFICATION_ID = 1001
-
-        const val ACTION_START = "com.liftley.vodrop.START_RECORDING"
-        const val ACTION_STOP = "com.liftley.vodrop.STOP_RECORDING"
-        const val ACTION_COPY_RESULT = "com.liftley.vodrop.COPY_RESULT"
-
-        const val EXTRA_RESULT_TEXT = "extra_result_text"
-        const val EXTRA_FROM_RECORDER = "extra_started_by_recorder"
+        const val ACTION_START = "com.liftley.vodrop.START_SERVICE"
     }
 
     private val sessionManager: RecordingSessionManager by inject()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    
+
     private var recordingStartTime: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -54,42 +50,17 @@ class RecordingService : Service() {
         super.onCreate()
         Log.d(TAG, "onCreate")
         createNotificationChannel()
-        observeSessionState()
+        observeState()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand - action: ${intent?.action}")
-
-        when (intent?.action) {
-            ACTION_START -> {
-                // Android requirement: Must call startForeground immediately
-                recordingStartTime = System.currentTimeMillis()
-                startForegroundWithNotification(createRecordingNotification())
-                
-                // Only trigger logic if NOT started by the Recorder itself (avoid recursion)
-                val startedByRecorder = intent.getBooleanExtra(EXTRA_FROM_RECORDER, false)
-                if (!startedByRecorder) {
-                    sessionManager.startRecording()
-                } else {
-                    Log.d(TAG, "Service started by AudioRecorder - skipping redundant start call")
-                }
-            }
-            ACTION_STOP -> {
-                // Useer tapped Stop on notification
-                sessionManager.stopRecording() 
-            }
-            ACTION_COPY_RESULT -> {
-                val text = intent.getStringExtra(EXTRA_RESULT_TEXT) ?: ""
-                copyToClipboard(text)
-
-                // Reset Manager to Idle (Ready)
-                sessionManager.resetState()
-            }
-            else -> {
-                Log.w(TAG, "Unknown action: ${intent?.action}")
-            }
-        }
-
+        
+        recordingStartTime = System.currentTimeMillis()
+        
+        // Always start foreground with current state notification
+        startForegroundWithNotification(createNotificationFor(sessionManager.state.value))
+        
         return START_NOT_STICKY
     }
 
@@ -98,27 +69,26 @@ class RecordingService : Service() {
         scope.cancel()
     }
 
-    private fun observeSessionState() {
+    /**
+     * Observe state and update notification accordingly.
+     * This is the ONLY job of this service.
+     */
+    private fun observeState() {
         scope.launch {
             sessionManager.state.collect { state ->
-                when (state) {
-                    is RecordingSessionManager.SessionState.Idle -> {
-                        updateNotification(createIdleNotification())
-                    }
-                    is RecordingSessionManager.SessionState.Recording -> {
-                        // Ensure we stand up functionality if resumed
-                    }
-                    is RecordingSessionManager.SessionState.Processing -> {
-                        updateNotification(createProcessingNotification(state.message))
-                    }
-                    is RecordingSessionManager.SessionState.Success -> {
-                        updateNotification(createResultNotification(state.text))
-                    }
-                    is RecordingSessionManager.SessionState.Error -> {
-                        updateNotification(createErrorNotification(state.message))
-                    }
-                }
+                Log.d(TAG, "State changed: $state")
+                updateNotification(createNotificationFor(state))
             }
+        }
+    }
+
+    private fun createNotificationFor(state: AppState): Notification {
+        return when (state) {
+            is AppState.Recording -> createRecordingNotification()
+            is AppState.Processing -> createProcessingNotification(state.message)
+            is AppState.Success -> createResultNotification(state.text)
+            is AppState.Error -> createErrorNotification(state.message)
+            is AppState.Ready -> createIdleNotification()
         }
     }
 
@@ -160,51 +130,60 @@ class RecordingService : Service() {
     }
 
     private fun createRecordingNotification(): Notification {
-        val stopIntent = PendingIntent.getService(
+        // Stop action via BroadcastReceiver
+        val stopIntent = PendingIntent.getBroadcast(
             this, 1,
-            Intent(this, RecordingService::class.java).apply { action = ACTION_STOP },
+            Intent(this, RecordingCommandReceiver::class.java).apply { 
+                action = RecordingCommandReceiver.ACTION_STOP 
+            },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
-        val openAppIntent = createOpenAppPendingIntent()
+
+        // Cancel action via BroadcastReceiver
+        val cancelIntent = PendingIntent.getBroadcast(
+            this, 2,
+            Intent(this, RecordingCommandReceiver::class.java).apply { 
+                action = RecordingCommandReceiver.ACTION_CANCEL 
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Recording...")
-            .setContentText("Tap Stop to finish")
+            .setContentText("Tap Stop to finish, Cancel to discard")
             .setUsesChronometer(true)
             .setWhen(recordingStartTime)
             .setOngoing(true)
-            .setContentIntent(openAppIntent)
+            .setContentIntent(createOpenAppPendingIntent())
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
     private fun createProcessingNotification(message: String): Notification {
-        val openAppIntent = createOpenAppPendingIntent()
-        
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("VoDrop")
             .setContentText(message)
             .setProgress(0, 0, true)
             .setOngoing(true)
-            .setContentIntent(openAppIntent)
+            .setContentIntent(createOpenAppPendingIntent())
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
     private fun createResultNotification(text: String): Notification {
-        val openAppIntent = createOpenAppPendingIntent()
         val displayMessage = if (text.length > 50) text.take(50) + "..." else text
 
-        val copyIntent = PendingIntent.getService(
-            this, 2,
-            Intent(this, RecordingService::class.java).apply { 
-                action = ACTION_COPY_RESULT
-                putExtra(EXTRA_RESULT_TEXT, text)
+        // Copy action via BroadcastReceiver
+        val copyIntent = PendingIntent.getBroadcast(
+            this, 3,
+            Intent(this, RecordingCommandReceiver::class.java).apply {
+                action = RecordingCommandReceiver.ACTION_COPY
+                putExtra(RecordingCommandReceiver.EXTRA_TEXT, text)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -214,40 +193,31 @@ class RecordingService : Service() {
             .setContentTitle("Transcription Ready")
             .setContentText(displayMessage)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openAppIntent)
-            .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent) // Using speak_now as copy icon placeholder
+            .setContentIntent(createOpenAppPendingIntent())
+            .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent)
             .setOngoing(true)
-            .setAutoCancel(false) // Don't dismiss on click
+            .setAutoCancel(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 
     private fun createIdleNotification(): Notification {
-        val startIntent = PendingIntent.getService(
-            this, 3,
-            Intent(this, RecordingService::class.java).apply { action = ACTION_START },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val openAppIntent = createOpenAppPendingIntent()
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("VoDrop Ready")
-            .setContentText("Tap Start to record")
+            .setContentText("Recording session active")
             .setOngoing(true)
-            .setContentIntent(openAppIntent)
-            .addAction(android.R.drawable.ic_media_play, "Start", startIntent)
+            .setContentIntent(createOpenAppPendingIntent())
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
     private fun createErrorNotification(message: String): Notification {
-         val openAppIntent = createOpenAppPendingIntent()
-         return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("Error")
             .setContentText(message)
-            .setContentIntent(openAppIntent)
+            .setContentIntent(createOpenAppPendingIntent())
             .setAutoCancel(true)
             .build()
     }
@@ -260,11 +230,5 @@ class RecordingService : Service() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-    }
-
-    private fun copyToClipboard(text: String) {
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("VoDrop Transcription", text)
-        clipboard.setPrimaryClip(clip)
     }
 }
