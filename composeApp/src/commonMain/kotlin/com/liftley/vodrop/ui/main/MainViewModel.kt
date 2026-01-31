@@ -51,7 +51,12 @@ class MainViewModel(
         when (appState.value) {
             is AppState.Ready -> sessionManager.startRecording()
             is AppState.Recording -> sessionManager.stopRecording()
-            else -> { /* Ignore during processing */ }
+            is AppState.Success, is AppState.Error -> {
+                // Reset and start new recording
+                sessionManager.resetState()
+                sessionManager.startRecording()
+            }
+            is AppState.Processing -> { /* Ignore during processing */ }
         }
     }
 
