@@ -188,13 +188,23 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Start New Recording action via BroadcastReceiver
+        val startIntent = PendingIntent.getBroadcast(
+            this, 5,
+            Intent(this, RecordingCommandReceiver::class.java).apply {
+                action = RecordingCommandReceiver.ACTION_START
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_save)
             .setContentTitle("Transcription Ready")
             .setContentText(displayMessage)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(createOpenAppPendingIntent())
-            .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent)
+            .addAction(android.R.drawable.ic_menu_edit, "Copy", copyIntent)
+            .addAction(android.R.drawable.ic_btn_speak_now, "New Recording", startIntent)
             .setOngoing(true)
             .setAutoCancel(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -202,12 +212,22 @@ class RecordingService : Service() {
     }
 
     private fun createIdleNotification(): Notification {
+        // Start Recording action via BroadcastReceiver
+        val startIntent = PendingIntent.getBroadcast(
+            this, 4,
+            Intent(this, RecordingCommandReceiver::class.java).apply { 
+                action = RecordingCommandReceiver.ACTION_START 
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("VoDrop Ready")
-            .setContentText("Recording session active")
+            .setContentText("Tap to start recording from anywhere")
             .setOngoing(true)
             .setContentIntent(createOpenAppPendingIntent())
+            .addAction(android.R.drawable.ic_btn_speak_now, "Start Recording", startIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }

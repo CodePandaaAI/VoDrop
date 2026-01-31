@@ -16,6 +16,7 @@ class RecordingCommandReceiver : BroadcastReceiver(), KoinComponent {
     
     companion object {
         private const val TAG = "RecordingCommandReceiver"
+        const val ACTION_START = "com.liftley.vodrop.ACTION_START"
         const val ACTION_STOP = "com.liftley.vodrop.ACTION_STOP"
         const val ACTION_CANCEL = "com.liftley.vodrop.ACTION_CANCEL"
         const val ACTION_COPY = "com.liftley.vodrop.ACTION_COPY"
@@ -28,6 +29,9 @@ class RecordingCommandReceiver : BroadcastReceiver(), KoinComponent {
         Log.d(TAG, "Received action: ${intent.action}")
         
         when (intent.action) {
+            ACTION_START -> {
+                sessionManager.startRecording()
+            }
             ACTION_STOP -> {
                 sessionManager.stopRecording()
             }
