@@ -60,10 +60,14 @@ class MainViewModel(
         sessionManager.cancelRecording()
     }
 
-    // ---------------- Mode ----------------
+    // ---------------- Mode Sheet ----------------
+
+    fun showModeSheet() = _uiState.update { it.copy(showModeSheet = true) }
+    fun hideModeSheet() = _uiState.update { it.copy(showModeSheet = false) }
 
     fun selectMode(mode: TranscriptionMode) {
         sessionManager.setMode(mode)
+        hideModeSheet()
     }
 
     // ---------------- Error ----------------
@@ -85,24 +89,40 @@ class MainViewModel(
         }
     }
 
-    fun startEdit(t: Transcription) = _uiState.update { 
-        it.copy(editingTranscription = t, editText = t.text) 
+    /** Start editing original text */
+    fun startEditOriginal(t: Transcription) = _uiState.update { 
+        it.copy(editingTranscription = t, editText = t.originalText, isEditingPolished = false) 
     }
+
+    /** Start editing polished text */
+    fun startEditPolished(t: Transcription) = _uiState.update { 
+        it.copy(editingTranscription = t, editText = t.polishedText ?: "", isEditingPolished = true) 
+    }
+    
     fun updateEditText(text: String) = _uiState.update { it.copy(editText = text) }
-    fun cancelEdit() = _uiState.update { it.copy(editingTranscription = null, editText = "") }
+    fun cancelEdit() = _uiState.update { it.copy(editingTranscription = null, editText = "", isEditingPolished = false) }
+    
+    /** Save edit to original or polished text based on which is being edited */
     fun saveEdit() {
         val t = _uiState.value.editingTranscription ?: return
+        val isPolished = _uiState.value.isEditingPolished
         viewModelScope.launch {
-            historyRepository.updateTranscription(t.id, _uiState.value.editText)
-            _uiState.update { it.copy(editingTranscription = null, editText = "") }
+            if (isPolished) {
+                historyRepository.updatePolishedText(t.id, _uiState.value.editText)
+            } else {
+                historyRepository.updateOriginalText(t.id, _uiState.value.editText)
+            }
+            _uiState.update { it.copy(editingTranscription = null, editText = "", isEditingPolished = false) }
         }
     }
 
+    /** Improve/re-polish transcription with AI */
     fun onImproveWithAI(t: Transcription) {
         _uiState.update { it.copy(improvingId = t.id) }
         viewModelScope.launch {
-            transcribeUseCase.improveText(t.text)?.let { 
-                historyRepository.updateTranscription(t.id, it) 
+            // Polish the original text and save to polishedText column
+            transcribeUseCase.improveText(t.originalText)?.let { polished ->
+                historyRepository.updatePolishedText(t.id, polished)
             }
             _uiState.update { it.copy(improvingId = null) }
         }

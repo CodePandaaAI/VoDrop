@@ -39,6 +39,7 @@
             android:name=".service.RecordingCommandReceiver"
             android:exported="false">
             <intent-filter>
+                <action android:name="com.liftley.vodrop.ACTION_START" />
                 <action android:name="com.liftley.vodrop.ACTION_STOP" />
                 <action android:name="com.liftley.vodrop.ACTION_CANCEL" />
                 <action android:name="com.liftley.vodrop.ACTION_COPY" />

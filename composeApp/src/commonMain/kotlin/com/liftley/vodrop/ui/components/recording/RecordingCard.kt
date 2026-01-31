@@ -39,7 +39,7 @@ fun RecordingCard(
     onRecordClick: () -> Unit,
     onCancel: () -> Unit,
     onClearError: () -> Unit,
-    onCopy: (String) -> Unit
+    onCopyAndReset: (String) -> Unit
 ) {
     val (title, subtitle) = when (appState) {
         is AppState.Recording -> "Recording..." to "Tap to stop"
@@ -128,7 +128,7 @@ fun RecordingCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Button(
-                            onClick = { onCopy(appState.text) },
+                            onClick = { onCopyAndReset(appState.text) },
                             Modifier.align(Alignment.End),
                             shape = MaterialTheme.shapes.medium,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)

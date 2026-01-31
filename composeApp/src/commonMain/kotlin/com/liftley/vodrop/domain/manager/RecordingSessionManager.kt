@@ -89,9 +89,12 @@ class RecordingSessionManager(
                 )
 
                 result.fold(
-                    onSuccess = { text ->
-                        historyRepository.saveTranscription(text)
-                        _state.update { AppState.Success(text) }
+                    onSuccess = { texts ->
+                        // Save both original and polished text
+                        historyRepository.saveTranscription(texts.original, texts.polished)
+                        // Show whichever text is "final" to user
+                        val displayText = texts.polished ?: texts.original
+                        _state.update { AppState.Success(displayText) }
                     },
                     onFailure = { e ->
                         _state.update { AppState.Error(e.message ?: "Transcription failed") }

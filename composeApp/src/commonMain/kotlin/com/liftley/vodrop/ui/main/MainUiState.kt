@@ -25,7 +25,11 @@ data class MainUiState(
     val deleteConfirmationId: Long? = null,
     val editingTranscription: Transcription? = null,
     val editText: String = "",
-    val improvingId: Long? = null
+    val isEditingPolished: Boolean = false,
+    val improvingId: Long? = null,
+    
+    // Bottom sheets
+    val showModeSheet: Boolean = false
 ) {
     val statusText get() = "VoDrop • Free"
 }

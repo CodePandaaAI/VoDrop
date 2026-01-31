@@ -7,6 +7,14 @@ import com.liftley.vodrop.data.stt.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
 /**
+ * Result of transcription with both original and polished text.
+ */
+data class TranscriptionTexts(
+    val original: String,
+    val polished: String? = null
+)
+
+/**
  * Use case for transcribing audio with optional AI polish.
  * Uses kotlin.Result consistently for all operations.
  */
@@ -16,29 +24,31 @@ class TranscribeAudioUseCase(
 ) {
     /**
      * Transcribe audio data with optional AI polish.
-     * @return Result with transcribed text or error
+     * @return Result with both original and polished text
      */
     suspend operator fun invoke(
         audioData: ByteArray,
         mode: TranscriptionMode,
         onProgress: (String) -> Unit = {},
         onIntermediateResult: (String) -> Unit = {}
-    ): Result<String> {
+    ): Result<TranscriptionTexts> {
         return runCatching {
             onProgress("☁️ Transcribing...")
 
             when (val stt = sttEngine.transcribe(audioData)) {
                 is TranscriptionResult.Success -> {
-                    var text = stt.text.trim()
-                    onIntermediateResult(text)
+                    val originalText = stt.text.trim()
+                    onIntermediateResult(originalText)
 
                     // Apply AI polish if requested and text is substantial
-                    if (mode == TranscriptionMode.WITH_AI_POLISH && text.length > 20) {
+                    val polishedText = if (mode == TranscriptionMode.WITH_AI_POLISH && originalText.length > 20) {
                         onProgress("✨ Polishing...")
-                        text = applyPolish(text).getOrDefault(text)
+                        applyPolish(originalText).getOrNull()
+                    } else {
+                        null
                     }
                     
-                    text
+                    TranscriptionTexts(original = originalText, polished = polishedText)
                 }
                 is TranscriptionResult.Error -> throw Exception(stt.message)
             }

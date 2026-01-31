@@ -26,28 +26,34 @@ class TranscriptionRepositoryImpl(
                     Transcription(
                         id = entity.id,
                         timestamp = entity.timestamp,
-                        text = entity.text
+                        originalText = entity.originalText,
+                        polishedText = entity.polishedText
                     )
                 }
             }
     }
 
-    override suspend fun saveTranscription(text: String): Boolean {
-        // Validation logic moved from UseCase
-        if (text.isBlank() || text == "(No speech detected)") {
+    override suspend fun saveTranscription(originalText: String, polishedText: String?): Boolean {
+        if (originalText.isBlank() || originalText == "(No speech detected)") {
             return false
         }
 
         return withContext(Dispatchers.IO) {
             val timestamp = DateTimeUtils.formatCurrentTimestamp()
-            queries.insertItem(timestamp, text)
+            queries.insertItem(timestamp, originalText, polishedText)
             true
         }
     }
 
-    override suspend fun updateTranscription(id: Long, text: String) {
+    override suspend fun updateOriginalText(id: Long, text: String) {
         withContext(Dispatchers.IO) {
-            queries.updateText(text, id)
+            queries.updateOriginalText(text, id)
+        }
+    }
+
+    override suspend fun updatePolishedText(id: Long, text: String) {
+        withContext(Dispatchers.IO) {
+            queries.updatePolishedText(text, id)
         }
     }
 

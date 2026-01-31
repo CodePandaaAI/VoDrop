@@ -12,10 +12,17 @@ interface TranscriptionRepository {
 
     /**
      * Save a transcription with auto-generated timestamp.
-     * Returns true if saved, false if text was invalid.
+     * @param originalText The raw STT output
+     * @param polishedText Optional AI-polished version
+     * @return true if saved, false if text was invalid
      */
-    suspend fun saveTranscription(text: String): Boolean
+    suspend fun saveTranscription(originalText: String, polishedText: String? = null): Boolean
 
-    suspend fun updateTranscription(id: Long, text: String)
+    /** Update the original text (user manual edits) */
+    suspend fun updateOriginalText(id: Long, text: String)
+
+    /** Update the polished text (AI re-polish) */
+    suspend fun updatePolishedText(id: Long, text: String)
+
     suspend fun deleteTranscription(id: Long)
 }
