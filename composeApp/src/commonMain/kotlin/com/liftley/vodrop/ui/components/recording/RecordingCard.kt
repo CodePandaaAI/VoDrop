@@ -39,10 +39,11 @@ fun RecordingCard(
     onClearError: () -> Unit,
     onCopy: () -> Unit
 ) {
+    // FIXED: Title/Subtitle are now simple. Details are shown in dedicated sections below.
     val (title, subtitle) = when (phase) {
         is MicPhase.Recording -> "Recording..." to "Tap to stop"
-        is MicPhase.Processing -> "Processing..." to progressMessage.ifEmpty { "Please wait..." }
-        is MicPhase.Error -> "Error" to phase.message
+        is MicPhase.Processing -> "Processing..." to "Please wait"
+        is MicPhase.Error -> "Error" to "Something went wrong"
         else -> "Ready" to "Tap to record"
     }
 
@@ -87,7 +88,25 @@ fun RecordingCard(
                 }
             }
 
-            if (currentTranscription.isNotEmpty()) {
+            // --- PROCESSING DETAILS (Single Source of Truth for progress) ---
+            if (phase is MicPhase.Processing) {
+                Spacer(Modifier.height(Dimens.large24))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        Modifier.size(Dimens.large24),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(Dimens.small16))
+                    // Show message if available, otherwise a default
+                    Text(
+                        progressMessage.ifEmpty { "Working on it..." },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // --- TRANSCRIPTION RESULT ---
+            if (currentTranscription.isNotEmpty() && phase is MicPhase.Idle) {
                 Spacer(Modifier.height(Dimens.huge48))
                 Card(
                     Modifier.fillMaxWidth(),
@@ -97,7 +116,7 @@ fun RecordingCard(
                     )
                 ) {
                     Column(
-                        Modifier.padding(Dimens.small16),
+                        Modifier.fillMaxWidth().padding(Dimens.small16),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(Dimens.large24)
                     ) {
@@ -129,18 +148,7 @@ fun RecordingCard(
                 }
             }
 
-            if (phase is MicPhase.Processing && progressMessage.isNotEmpty()) {
-                Spacer(Modifier.height(Dimens.large24))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        Modifier.size(Dimens.large24),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(Dimens.small16))
-                    Text(progressMessage, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
+            // --- ERROR DETAILS (Single Source of Truth for error message) ---
             if (phase is MicPhase.Error) {
                 Spacer(Modifier.height(Dimens.large24))
                 Card(

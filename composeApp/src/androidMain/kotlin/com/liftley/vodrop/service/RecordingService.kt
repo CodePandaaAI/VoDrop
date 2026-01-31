@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.getSystemService
 import com.liftley.vodrop.MainActivity
 import com.liftley.vodrop.domain.manager.RecordingSessionManager
 import kotlinx.coroutines.CoroutineScope
@@ -154,7 +155,7 @@ class RecordingService : Service() {
             description = "Shows recording status and controls"
             setShowBadge(true)
         }
-        val manager = getSystemService(NotificationManager::class.java)
+        val manager = getSystemService<NotificationManager>()
         manager?.createNotificationChannel(channel)
     }
 
@@ -176,7 +177,7 @@ class RecordingService : Service() {
             .setOngoing(true)
             .setContentIntent(openAppIntent)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
@@ -191,7 +192,7 @@ class RecordingService : Service() {
             .setProgress(0, 0, true)
             .setOngoing(true)
             .setContentIntent(openAppIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
@@ -217,7 +218,7 @@ class RecordingService : Service() {
             .addAction(android.R.drawable.ic_btn_speak_now, "Copy", copyIntent) // Using speak_now as copy icon placeholder
             .setOngoing(true)
             .setAutoCancel(false) // Don't dismiss on click
-            .setPriority(NotificationCompat.PRIORITY_HIGH) 
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 
@@ -236,7 +237,7 @@ class RecordingService : Service() {
             .setOngoing(true)
             .setContentIntent(openAppIntent)
             .addAction(android.R.drawable.ic_media_play, "Start", startIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
