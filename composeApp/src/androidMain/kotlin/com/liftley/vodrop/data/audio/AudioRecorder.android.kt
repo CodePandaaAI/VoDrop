@@ -24,7 +24,7 @@ private const val TAG = "AudioRecorder"
 /**
  * Android audio recorder using AudioRecord API.
  * Produces 16kHz, mono, 16-bit PCM audio.
- * 
+ *
  * PURE RECORDER: No state exposure, no service knowledge.
  * Just records bytes and returns them.
  */
@@ -47,7 +47,8 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
         Log.d(TAG, "startRecording() called")
 
         if (recordingJob?.isActive == true) {
-            throw AudioRecorderException("Already recording")
+            Log.d(TAG, "startRecording() called while already recording, ignoring.")
+            return
         }
 
         if (ContextCompat.checkSelfPermission(
@@ -100,10 +101,12 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                         bytesRead > 0 -> {
                             audioData.write(buffer, 0, bytesRead)
                         }
+
                         bytesRead == AudioRecord.ERROR_INVALID_OPERATION -> {
                             Log.e(TAG, "Recording error: invalid operation")
                             break
                         }
+
                         bytesRead == AudioRecord.ERROR_BAD_VALUE -> {
                             Log.e(TAG, "Recording error: bad value")
                             break

@@ -1,5 +1,7 @@
 package com.liftley.vodrop.data.stt
 
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
@@ -7,6 +9,10 @@ import com.liftley.vodrop.data.audio.AudioConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import java.io.File
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -15,23 +21,29 @@ private const val TAG = "CloudSTT"
 
 /**
  * Android Speech-to-Text engine using Firebase Cloud Functions.
+ * Uses putFile for memory-safe uploads of any recording length.
  */
-class CloudSpeechToTextEngine : SpeechToTextEngine {
+class CloudSpeechToTextEngine(): SpeechToTextEngine, KoinComponent {
+
+    private val context: Context by inject()
 
     private val functions: FirebaseFunctions by lazy { FirebaseFunctions.getInstance() }
     private val storage: FirebaseStorage by lazy { FirebaseStorage.getInstance("gs://post-3424f.firebasestorage.app") }
 
     override suspend fun transcribe(audioData: ByteArray): TranscriptionResult {
         return withContext(Dispatchers.IO) {
+            var tempFile: File? = null
             try {
-                // 1. Create WAV file (48kHz, mono, 16-bit)
-                val wavData = createWavFile(audioData)
+                // 1. Write WAV to temp file (memory-safe)
+                tempFile = File.createTempFile("audio_", ".wav", context.cacheDir)
+                writeWavToFile(audioData, tempFile)
+
                 val filename = "${UUID.randomUUID()}.wav"
                 val storageRef = storage.reference.child("uploads/$filename")
 
-                // 2. Upload to Firebase Storage
-                Log.d(TAG, "Uploading ${wavData.size} bytes (${AudioConfig.SAMPLE_RATE}Hz WAV)...")
-                storageRef.putBytes(wavData).await()
+                // 2. Upload using putFile (streams from disk, low RAM usage)
+                Log.d(TAG, "Uploading ${tempFile.length()} bytes (${AudioConfig.SAMPLE_RATE}Hz WAV)...")
+                storageRef.putFile(Uri.fromFile(tempFile)).await()
 
                 // 3. Get GCS URI
                 val gcsUri = "gs://${storageRef.bucket}/uploads/$filename"
@@ -44,7 +56,7 @@ class CloudSpeechToTextEngine : SpeechToTextEngine {
                     .call(mapOf("gcsUri" to gcsUri))
                     .await()
 
-                // 5. Cleanup
+                // 5. Cleanup remote file
                 storageRef.delete().addOnFailureListener { Log.w(TAG, "Cleanup failed", it) }
 
                 @Suppress("UNCHECKED_CAST")
@@ -56,46 +68,51 @@ class CloudSpeechToTextEngine : SpeechToTextEngine {
             } catch (e: Exception) {
                 Log.e(TAG, "Transcription failed", e)
                 TranscriptionResult.Error(e.message ?: "Transcription failed")
+            } finally {
+                // 6. Always delete local temp file
+                tempFile?.delete()
             }
         }
     }
 
     /**
-     * // 1. Create WAV file (16kHz, mono, 16-bit) from raw PCM using ByteBuffer (correct byte ordering).
-     * Format: 16kHz, mono, 16-bit PCM
+     * Write WAV file to disk (header + PCM data).
      */
-    private fun createWavFile(pcmData: ByteArray): ByteArray {
-        val sampleRate = AudioConfig.SAMPLE_RATE        // 16000
-        val channels = AudioConfig.CHANNELS              // 1
-        val bitsPerSample = AudioConfig.BITS_PER_SAMPLE  // 16
+    private fun writeWavToFile(pcmData: ByteArray, outputFile: File) {
+        FileOutputStream(outputFile).use { stream ->
+            stream.write(createWavHeader(pcmData.size))
+            stream.write(pcmData)
+        }
+    }
+
+    /**
+     * Create 44-byte WAV header for PCM data.
+     */
+    private fun createWavHeader(dataSize: Int): ByteArray {
+        val sampleRate = AudioConfig.SAMPLE_RATE
+        val channels = AudioConfig.CHANNELS
+        val bitsPerSample = AudioConfig.BITS_PER_SAMPLE
         val byteRate = sampleRate * channels * bitsPerSample / 8
         val blockAlign = channels * bitsPerSample / 8
-        val dataSize = pcmData.size
 
-        val buffer = ByteBuffer.allocate(44 + dataSize)
+        return ByteBuffer.allocate(44)
             .order(ByteOrder.LITTLE_ENDIAN)
-
-        // RIFF header
-        buffer.put("RIFF".toByteArray(Charsets.US_ASCII))
-        buffer.putInt(36 + dataSize)  // File size - 8
-        buffer.put("WAVE".toByteArray(Charsets.US_ASCII))
-
-        // fmt chunk
-        buffer.put("fmt ".toByteArray(Charsets.US_ASCII))
-        buffer.putInt(16)                          // Chunk size
-        buffer.putShort(1)                         // Audio format (1 = PCM)
-        buffer.putShort(channels.toShort())        // Channels
-        buffer.putInt(sampleRate)                  // Sample rate
-        buffer.putInt(byteRate)                    // Byte rate
-        buffer.putShort(blockAlign.toShort())      // Block align
-        buffer.putShort(bitsPerSample.toShort())   // Bits per sample
-
-        // data chunk
-        buffer.put("data".toByteArray(Charsets.US_ASCII))
-        buffer.putInt(dataSize)
-        buffer.put(pcmData)
-
-        return buffer.array()
+            .apply {
+                put("RIFF".toByteArray(Charsets.US_ASCII))
+                putInt(36 + dataSize)
+                put("WAVE".toByteArray(Charsets.US_ASCII))
+                put("fmt ".toByteArray(Charsets.US_ASCII))
+                putInt(16)
+                putShort(1.toShort())
+                putShort(channels.toShort())
+                putInt(sampleRate)
+                putInt(byteRate)
+                putShort(blockAlign.toShort())
+                putShort(bitsPerSample.toShort())
+                put("data".toByteArray(Charsets.US_ASCII))
+                putInt(dataSize)
+            }
+            .array()
     }
 }
 

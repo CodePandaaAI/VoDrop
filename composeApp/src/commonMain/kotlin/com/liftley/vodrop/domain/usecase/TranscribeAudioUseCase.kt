@@ -1,6 +1,5 @@
 package com.liftley.vodrop.domain.usecase
 
-import com.liftley.vodrop.data.llm.CleanupStyle
 import com.liftley.vodrop.data.llm.TextCleanupService
 import com.liftley.vodrop.data.stt.SpeechToTextEngine
 import com.liftley.vodrop.data.stt.TranscriptionResult
@@ -29,8 +28,7 @@ class TranscribeAudioUseCase(
     suspend operator fun invoke(
         audioData: ByteArray,
         mode: TranscriptionMode,
-        onProgress: (String) -> Unit = {},
-        onIntermediateResult: (String) -> Unit = {}
+        onProgress: (String) -> Unit = {}
     ): Result<TranscriptionTexts> {
         return runCatching {
             onProgress("☁️ Transcribing...")
@@ -38,7 +36,6 @@ class TranscribeAudioUseCase(
             when (val stt = sttEngine.transcribe(audioData)) {
                 is TranscriptionResult.Success -> {
                     val originalText = stt.text.trim()
-                    onIntermediateResult(originalText)
 
                     // Apply AI polish if requested and text is substantial
                     val polishedText = if (mode == TranscriptionMode.WITH_AI_POLISH && originalText.length > 20) {
@@ -64,6 +61,6 @@ class TranscribeAudioUseCase(
         if (!cleanupService.isAvailable()) {
             return Result.failure(Exception("Service unavailable"))
         }
-        return cleanupService.cleanupText(text, CleanupStyle.INFORMAL)
+        return cleanupService.cleanupText(text)
     }
 }
