@@ -1,9 +1,15 @@
 package com.liftley.vodrop.ui.components.history
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material3.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -11,18 +17,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.ui.theme.Dimens
+import org.jetbrains.compose.resources.painterResource
+import vodrop.composeapp.generated.resources.Res
+import vodrop.composeapp.generated.resources.empty_state
 
 @Composable
 fun EmptyState() {
-    Box(Modifier.fillMaxWidth().padding(vertical = 96.dp), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier.fillMaxWidth().padding(vertical = Dimens.small16),
+        contentAlignment = Alignment.Center
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                Icons.Rounded.Mic,
-                null,
-                Modifier.size(144.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            Image(
+                painter = painterResource(Res.drawable.empty_state),
+                contentDescription = null,
+                modifier = Modifier.size(144.dp)
             )
-            Spacer(Modifier.height(Dimens.huge48))
             Text(
                 "No Drops Yet",
                 style = MaterialTheme.typography.headlineMedium,
