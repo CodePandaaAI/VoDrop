@@ -9,8 +9,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.liftley.vodrop.service.ServiceController
+import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
+
+    private val serviceController: ServiceController by inject()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -24,7 +28,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestPermissionsIfNeeded()
+        // Start service immediately so it's ready for recording
+        serviceController.startForeground()
         setContent { App() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop service when app is closed (not just backgrounded)
+        if (isFinishing) {
+            serviceController.stopForeground()
+        }
     }
 
     private fun requestPermissionsIfNeeded() {

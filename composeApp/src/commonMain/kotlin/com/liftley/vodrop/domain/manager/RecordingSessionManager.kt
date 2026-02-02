@@ -47,17 +47,19 @@ class RecordingSessionManager(
     fun startRecording() {
         if (_state.value is AppState.Recording) return
 
-        _state.update { AppState.Recording }
-        
         scope.launch {
             try {
                 // Start foreground service first (Android requirement)
                 serviceController.startForeground()
+                
+                // Update state after service is ready
+                _state.update { AppState.Recording }
+                
                 // Then start actual recording
                 audioRecorder.startRecording()
             } catch (e: Exception) {
+                // Recording failed - show error (service stays running for next attempt)
                 _state.update { AppState.Error(e.message ?: "Failed to start recording") }
-                serviceController.stopForeground()
             }
         }
     }
@@ -115,7 +117,7 @@ class RecordingSessionManager(
                 // Ignore errors during cancel
             } finally {
                 _state.update { AppState.Ready }
-                serviceController.stopForeground()
+                // Service stays running - ready for next recording
             }
         }
     }

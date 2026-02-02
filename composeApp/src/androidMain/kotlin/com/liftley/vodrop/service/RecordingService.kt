@@ -35,6 +35,7 @@ class RecordingService : Service() {
     companion object {
         private const val TAG = "RecordingService"
         const val CHANNEL_ID = "vodrop_recording_channel"
+        const val RESULT_CHANNEL_ID = "vodrop_result_channel"
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.liftley.vodrop.START_SERVICE"
     }
@@ -117,16 +118,30 @@ class RecordingService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
+        // Silent channel for recording/processing
+        val silentChannel = NotificationChannel(
             CHANNEL_ID,
             "VoDrop Recording",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Shows recording status (silent)"
+            setShowBadge(false)
+            setSound(null, null)
+        }
+        
+        // Sound channel for results
+        val resultChannel = NotificationChannel(
+            RESULT_CHANNEL_ID,
+            "VoDrop Results",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Shows recording status and controls"
+            description = "Notifies when transcription is ready"
             setShowBadge(true)
         }
+        
         val manager = getSystemService<NotificationManager>()
-        manager?.createNotificationChannel(channel)
+        manager?.createNotificationChannel(silentChannel)
+        manager?.createNotificationChannel(resultChannel)
     }
 
     private fun createRecordingNotification(): Notification {
@@ -148,7 +163,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Pop up with sound
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Recording...")
             .setContentText("Tap Stop to finish, Cancel to discard")
@@ -158,7 +173,7 @@ class RecordingService : Service() {
             .setContentIntent(createOpenAppPendingIntent())
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
@@ -170,8 +185,9 @@ class RecordingService : Service() {
             .setContentText(message)
             .setProgress(0, 0, true)
             .setOngoing(true)
+            .setSilent(true)  // No sound for processing
             .setContentIntent(createOpenAppPendingIntent())
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
@@ -197,7 +213,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Use result channel for sound
             .setSmallIcon(android.R.drawable.ic_menu_save)
             .setContentTitle("Transcription Ready")
             .setContentText(displayMessage)
@@ -221,22 +237,23 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Pop up with sound
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("VoDrop Ready")
             .setContentText("Tap to start recording from anywhere")
             .setOngoing(true)
             .setContentIntent(createOpenAppPendingIntent())
             .addAction(android.R.drawable.ic_btn_speak_now, "Start Recording", startIntent)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
     }
 
     private fun createErrorNotification(message: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)  // Silent channel
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("Error")
             .setContentText(message)
+            .setSilent(true)
             .setContentIntent(createOpenAppPendingIntent())
             .setAutoCancel(true)
             .build()
