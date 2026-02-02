@@ -30,6 +30,4 @@ data class MainUiState(
     
     // Bottom sheets
     val showModeSheet: Boolean = false
-) {
-    val statusText get() = "VoDrop • Free"
-}
+)

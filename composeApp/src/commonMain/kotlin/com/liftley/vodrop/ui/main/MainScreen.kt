@@ -53,6 +53,9 @@ import com.liftley.vodrop.ui.components.recording.RecordingCard
 import com.liftley.vodrop.ui.components.reusable.ExpressiveIconButton
 import com.liftley.vodrop.ui.theme.Dimens
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import vodrop.composeapp.generated.resources.Res
+import vodrop.composeapp.generated.resources.status_text
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +78,7 @@ fun MainScreen(viewModel: MainViewModel) {
         drawerState = drawerState,
         drawerContent = {
             AppDrawerContent(
-                statusText = uiState.statusText,
+                statusText = stringResource(Res.string.status_text),
                 onClose = { scope.launch { drawerState.close() } }
             )
         },
