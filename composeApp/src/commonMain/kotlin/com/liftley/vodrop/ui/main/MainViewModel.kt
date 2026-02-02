@@ -125,9 +125,13 @@ class MainViewModel(
     fun onImproveWithAI(t: Transcription) {
         _uiState.update { it.copy(improvingId = t.id) }
         viewModelScope.launch {
-            // Polish the original text and save to polishedText column
-            transcribeUseCase.improveText(t.originalText)?.let { polished ->
-                historyRepository.updatePolishedText(t.id, polished)
+            val result = transcribeUseCase.improveText(t.originalText)
+            if (result != null) {
+                historyRepository.updatePolishedText(t.id, result)
+                println("[ViewModel] AI polish success for id=${t.id}")
+            } else {
+                println("[ViewModel] AI polish FAILED for id=${t.id}")
+                // TODO: Show error toast/snackbar to user
             }
             _uiState.update { it.copy(improvingId = null) }
         }

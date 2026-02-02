@@ -1,6 +1,6 @@
 # VoDrop - Project Context & Motive
 
-> **Last Updated:** January 31, 2026  
+> **Last Updated:** February 2, 2026  
 > **Version:** Post-Architecture Refactor (Unified AppState)
 
 ---
@@ -102,14 +102,14 @@ Cloud STT (Chirp 3) provides:
 
 ## 🔧 Key Components
 
-| Component | Responsibility |
-|-----------|---------------|
-| `RecordingSessionManager` | **SSOT** - Owns AppState, orchestrates recording flow |
-| `AudioRecorder` | **Pure byte recorder** - No state, just records PCM bytes |
-| `RecordingService` | **Pure observer** - Shows notification based on AppState |
-| `ServiceController` | **Platform abstraction** - Start/stop foreground service |
-| `TranscribeAudioUseCase` | **Orchestrator** - STT + optional AI polish |
-| `MainViewModel` | **Thin UI layer** - Exposes AppState, handles UI events |
+| Component                 | Responsibility                                            |
+|---------------------------|-----------------------------------------------------------|
+| `RecordingSessionManager` | **SSOT** - Owns AppState, orchestrates recording flow     |
+| `AudioRecorder`           | **Pure byte recorder** - No state, just records PCM bytes |
+| `RecordingService`        | **Pure observer** - Shows notification based on AppState  |
+| `ServiceController`       | **Platform abstraction** - Start/stop foreground service  |
+| `TranscribeAudioUseCase`  | **Orchestrator** - STT + optional AI polish               |
+| `MainViewModel`           | **Thin UI layer** - Exposes AppState, handles UI events   |
 
 ---
 
@@ -192,12 +192,12 @@ AppState ← cycle continues
 
 ## 🚀 Evolution Summary
 
-| Phase | What Changed |
-|-------|-------------|
+| Phase       | What Changed                                                |
+|-------------|-------------------------------------------------------------|
 | **Phase 1** | Started with local Whisper.cpp (abandoned - hung on device) |
-| **Phase 2** | Moved to Groq Whisper API (worked but insecure keys) |
-| **Phase 3** | Firebase + Chirp 3 + Gemini (current architecture) |
-| **Phase 4** | Unified AppState refactor (simplified state management) |
+| **Phase 2** | Moved to Groq Whisper API (worked but insecure keys)        |
+| **Phase 3** | Firebase + Chirp 3 + Gemini (current architecture)          |
+| **Phase 4** | Unified AppState refactor (simplified state management)     |
 
 ---
 
@@ -206,7 +206,7 @@ AppState ← cycle continues
 - Prefers **understanding** over copy-paste solutions
 - Values **simplicity** - if code is complex, it's probably wrong
 - Manual file updates preferred over automated edits
-- 48kHz audio sample rate (high quality, intentional choice)
+- 16kHz audio sample rate (standard for speech recognition)
 
 ---
 

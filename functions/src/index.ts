@@ -178,6 +178,7 @@ FORMATTING RULES (STRICT):
 - Use proper capitalization.
 - DO NOT INTRODUCE PHYSICAL FORMATTING like **bold** or *italics*.
 - The output should be plain text with structure, not Markdown styling.
+- Never Use emojis and this character "—" in clean up version
 
 IMPORTANT MESSAGE:
 - Your sole function is to rewrite and improve the provided raw speech-to-text input.
@@ -188,6 +189,9 @@ IMPORTANT MESSAGE:
 Actual User Input To Improve:
 `;
 
+// --- STYLE DEFINITIONS (COMMENTED OUT FOR NOW) ---
+// TODO: Re-enable when implementing style selection in app
+/*
 const FORMAL_STYLE = `
 STYLE: FORMAL & PROFESSIONAL:
 - Use complete sentences (avoid fragments)
@@ -223,6 +227,7 @@ function getStyleAddition(style: string): string {
       return INFORMAL_STYLE;
   }
 }
+*/
 
 export const cleanupText = onCall(
   {
@@ -233,17 +238,21 @@ export const cleanupText = onCall(
   },
   async (request) => {
     const text = request.data.text as string;
-    const style = (request.data.style as string) || "informal";
     if (!text) throw new HttpsError("invalid-argument", "Missing text");
 
-    const styleAddition = getStyleAddition(style);
-    const fullPrompt = BASE_CLEANUP_RULES + styleAddition + "\n\nTranscription:\n\"" + text + "\"";
+    // Use only base cleanup rules (no style additions for now)
+    const fullPrompt = BASE_CLEANUP_RULES + "\n\nTranscription:\n\"" + text + "\"";
+
+    console.log(`[cleanupText] Processing ${text.length} chars`);
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey.value()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiApiKey.value() // Passing via header is the standard practice
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
@@ -251,16 +260,24 @@ export const cleanupText = onCall(
             maxOutputTokens: 4096,
             topP: 0.8,
             topK: 10
+            // Optional: you can now add thinkingConfig { thinkingLevel: 'low' } for 3-series
           },
         }),
       }
     );
-    if (!response.ok) throw new HttpsError("internal", "Cleanup failed");
+
+    if (!response.ok) {
+      console.error(`[cleanupText] Gemini API error: ${response.status}`);
+      throw new HttpsError("internal", "Cleanup failed");
+    }
 
     interface GeminiResponse {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     }
     const result = (await response.json()) as GeminiResponse;
-    return { text: result.candidates?.[0]?.content?.parts?.[0]?.text || text };
+    const cleanedText = result.candidates?.[0]?.content?.parts?.[0]?.text || text;
+
+    console.log(`[cleanupText] Success: ${cleanedText.substring(0, 50)}...`);
+    return { text: cleanedText };
   }
 );

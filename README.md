@@ -45,9 +45,9 @@ VoDrop provides:
 
 ### Transcription Modes
 
-| Mode | What It Does |
-|------|--------------|
-| **Standard** | Pure Chirp 3 transcription |
+| Mode          | What It Does                                                       |
+|---------------|--------------------------------------------------------------------|
+| **Standard**  | Pure Chirp 3 transcription                                         |
 | **AI Polish** | Transcription + Gemini cleanup (removes "um", "uh", fixes grammar) |
 
 ---
@@ -103,18 +103,18 @@ This single sealed interface replaces what were previously 3 separate state clas
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **UI** | Compose Multiplatform | Cross-platform UI |
-| **Design** | Material 3 | Modern design system |
-| **Architecture** | MVVM + SSOT | Clean separation |
-| **DI** | Koin | Dependency injection |
-| **Database** | SQLDelight | Local transcription history |
-| **Speech-to-Text** | Google Chirp 3 | High-accuracy cloud STT |
-| **AI Cleanup** | Gemini 3 Flash | Text polish & grammar fix |
-| **Cloud** | Firebase Functions | Secure API key management |
-| **Background** | Foreground Service | Recording while app in background |
-| **Networking** | Ktor | HTTP client |
+| Layer              | Technology            | Purpose                           |
+|--------------------|-----------------------|-----------------------------------|
+| **UI**             | Compose Multiplatform | Cross-platform UI                 |
+| **Design**         | Material 3            | Modern design system              |
+| **Architecture**   | MVVM + SSOT           | Clean separation                  |
+| **DI**             | Koin                  | Dependency injection              |
+| **Database**       | SQLDelight            | Local transcription history       |
+| **Speech-to-Text** | Google Chirp 3        | High-accuracy cloud STT           |
+| **AI Cleanup**     | Gemini 3 Flash        | Text polish & grammar fix         |
+| **Cloud**          | Firebase Functions    | Secure API key management         |
+| **Background**     | Foreground Service    | Recording while app in background |
+| **Networking**     | Ktor                  | HTTP client                       |
 
 ---
 
@@ -127,8 +127,7 @@ VoDrop/
 │   │   ├── data/
 │   │   │   ├── audio/AudioConfig.kt         # Audio constants
 │   │   │   ├── stt/SpeechToTextEngine.kt    # STT interface
-│   │   │   ├── llm/TextCleanupService.kt    # AI cleanup interface
-│   │   │   └── firebase/FirebaseFunctionsService.kt
+│   │   │   └── llm/TextCleanupService.kt    # AI cleanup interface
 │   │   ├── domain/
 │   │   │   ├── model/
 │   │   │   │   ├── AppState.kt              # ★ Unified state
@@ -149,13 +148,15 @@ VoDrop/
 │   │       └── theme/Theme.kt
 │   │
 │   ├── androidMain/kotlin/com/liftley/vodrop/
-│   │   ├── data/audio/AudioRecorder.android.kt
-│   │   ├── data/stt/SpeechToTextEngine.android.kt
+│   │   ├── data/
+│   │   │   ├── audio/AudioRecorder.android.kt
+│   │   │   ├── stt/SpeechToTextEngine.android.kt  # Cloud STT (Chirp 3)
+│   │   │   └── llm/FirebaseTextCleanupService.kt  # AI cleanup (Gemini)
 │   │   ├── service/RecordingService.kt      # Foreground service
 │   │   └── service/RecordingCommandReceiver.kt
 │   │
 │   └── jvmMain/kotlin/com/liftley/vodrop/
-│       └── (Desktop implementations)
+│       └── (Desktop implementations - STT & cleanup via HTTP)
 │
 ├── functions/src/index.ts    # Firebase Cloud Functions
 └── gradle files
@@ -214,7 +215,7 @@ VoDrop uses Firebase Cloud Functions to keep API keys secure:
 
 ```kotlin
 object AudioConfig {
-    const val SAMPLE_RATE = 48000   // High quality
+    const val SAMPLE_RATE = 16000   // Standard for speech recognition
     const val CHANNELS = 1          // Mono
     const val BITS_PER_SAMPLE = 16  // 16-bit PCM
 }
@@ -256,11 +257,11 @@ firebase deploy --only functions
 
 ## 📱 Platform Status
 
-| Platform | Status |
-|----------|--------|
-| **Android** | ✅ Fully functional |
+| Platform          | Status                               |
+|-------------------|--------------------------------------|
+| **Android**       | ✅ Fully functional                   |
 | **Desktop (JVM)** | ✅ Functional (no background service) |
-| **iOS** | 📋 Placeholder (not implemented) |
+| **iOS**           | 📋 Placeholder (not implemented)     |
 
 ---
 
@@ -269,7 +270,7 @@ firebase deploy --only functions
 ### Current (v1)
 - [x] Voice recording with foreground service
 - [x] Cloud transcription (Chirp 3)
-- [x] AI Polish (Gemini 3)
+- [x] AI Polish (Gemini 3 Flash)
 - [x] Local history (SQLDelight)
 - [x] Unified AppState architecture
 
