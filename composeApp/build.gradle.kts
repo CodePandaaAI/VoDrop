@@ -51,11 +51,11 @@ kotlin {
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
 
-            // Firebase Auth
+            // Firebase
             implementation(project.dependencies.platform(libs.firebase.bom))
-            implementation(libs.firebase.auth.ktx)
-            implementation(libs.firebase.functions.ktx)
-            implementation(libs.firebase.storage.ktx)
+            implementation(libs.firebase.auth)
+            implementation(libs.firebase.functions)
+            implementation(libs.firebase.storage)
         }
 
         commonMain.dependencies {

@@ -1,36 +1,27 @@
-# ═══════════════════════════════════════════════════════════
-# VoDrop ProGuard Rules (Simplified - Post SHA-1 Fix)
-# ═══════════════════════════════════════════════════════════
+# ═══ APIS & DATA (Crucial) ═══
+# This protects your API response models from being renamed/deleted
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
 
-# ═══ CORE ANDROID ═══
--keepattributes *Annotation*
--keepattributes Signature
--keepattributes InnerClasses
--keepattributes EnclosingMethod
+-keepclassmembers class ** {
+    @kotlinx.serialization.SerialName <fields>;}
 
-# Keep native methods (standard Android)
--keepclasseswithmembernames class * {
-    native <methods>;
-}
+# ═══ SQLDELIGHT ═══
+# Use your actual package name here
+-keep class com.liftley.vodrop.db.** { *; }
 
-# ═══ KOTLINX SERIALIZATION (For Groq/Gemini API) ═══
--keep class kotlinx.serialization.** { *; }
+# ═══ KOTLIN SERIALIZATION ═══
 -keepclassmembers @kotlinx.serialization.Serializable class ** {
     *** Companion;
     *** INSTANCE;
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# ═══ SQLDELIGHT ═══
--keep class com.liftley.vodrop.db.** { *; }
+# ═══ FIREBASE / GMS ═══
+# Most Firebase libraries provide their own rules.
+# Only add these if you experience crashes in RELEASE builds.
+# -keep class com.google.firebase.** { *; }
+# -keep class com.google.android.gms.** { *; }
 
-# ═══ FIREBASE (Core + Auth + Firestore) ═══
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.firebase.**
-
-# ═══ SUPPRESS COMMON WARNINGS ═══
--dontwarn okhttp3.internal.platform.**
+# ═══ GENERAL HOUSEKEEPING ═══
+-dontwarn okhttp3.**
 -dontwarn org.conscrypt.**
--dontwarn org.bouncycastle.**
--dontwarn org.openjsse.**
