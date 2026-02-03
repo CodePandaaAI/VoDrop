@@ -37,7 +37,6 @@ class RecordingService : Service() {
         const val CHANNEL_ID = "vodrop_recording_channel"
         const val RESULT_CHANNEL_ID = "vodrop_result_channel"
         const val NOTIFICATION_ID = 1001
-        const val ACTION_START = "com.liftley.vodrop.START_SERVICE"
     }
 
     private val sessionManager: RecordingSessionManager by inject()
@@ -55,7 +54,7 @@ class RecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand - action: ${intent?.action}")
+        Log.d(TAG, "onStartCommand")
         
         recordingStartTime = System.currentTimeMillis()
         

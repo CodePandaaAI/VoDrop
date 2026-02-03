@@ -14,9 +14,7 @@ class AndroidServiceController : ServiceController, KoinComponent {
     private val context: Context by inject()
     
     override fun startForeground() {
-        val intent = Intent(context, RecordingService::class.java).apply {
-            action = RecordingService.ACTION_START
-        }
+        val intent = Intent(context, RecordingService::class.java)
         context.startForegroundService(intent)
     }
     
