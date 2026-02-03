@@ -1,10 +1,10 @@
 package com.liftley.vodrop.di
 
 import com.liftley.vodrop.data.audio.createAudioRecorder
+import com.liftley.vodrop.data.cloud.createCloudTranscriptionService
 import com.liftley.vodrop.domain.repository.TranscriptionRepositoryImpl
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.repository.TranscriptionRepository
-import com.liftley.vodrop.data.stt.createSpeechToTextEngine
 import com.liftley.vodrop.domain.manager.RecordingSessionManager
 import com.liftley.vodrop.domain.usecase.TranscribeAudioUseCase
 import com.liftley.vodrop.service.ServiceController
@@ -28,13 +28,13 @@ val appModule = module {
     single { VoDropDatabase(get()) }
     single<TranscriptionRepository> { TranscriptionRepositoryImpl(get()) }
 
-    // ═══════════ SERVICES ═══════════
+    // ═══════════ CLOUD SERVICES ═══════════
     single { createAudioRecorder() }
-    single { createSpeechToTextEngine() }
-    single<ServiceController> { createServiceController() }  // Platform-specific service control
+    single { createCloudTranscriptionService() }  // Unified: transcription + polish
+    single<ServiceController> { createServiceController() }
 
     // ═══════════ USE CASES ═══════════
-    single { TranscribeAudioUseCase(get(), get()) }
+    single { TranscribeAudioUseCase(get()) }  // Single dependency now!
 
     // ═══════════ MANAGERS (SSOT) ═══════════
     single {
@@ -42,7 +42,7 @@ val appModule = module {
             audioRecorder = get(),
             transcribeUseCase = get(),
             historyRepository = get(),
-            serviceController = get()  // NEW: service lifecycle control
+            serviceController = get()
         )
     }
 

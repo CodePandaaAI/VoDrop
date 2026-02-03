@@ -1,8 +1,7 @@
 package com.liftley.vodrop.domain.usecase
 
-import com.liftley.vodrop.data.llm.TextCleanupService
-import com.liftley.vodrop.data.stt.SpeechToTextEngine
-import com.liftley.vodrop.data.stt.TranscriptionResult
+import com.liftley.vodrop.data.cloud.CloudTranscriptionService
+import com.liftley.vodrop.data.cloud.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
 /**
@@ -15,11 +14,11 @@ data class TranscriptionTexts(
 
 /**
  * Use case for transcribing audio with optional AI polish.
- * Uses kotlin.Result consistently for all operations.
+ * 
+ * Single dependency: CloudTranscriptionService handles everything.
  */
 class TranscribeAudioUseCase(
-    private val sttEngine: SpeechToTextEngine,
-    private val cleanupService: TextCleanupService
+    private val cloudService: CloudTranscriptionService
 ) {
     /**
      * Transcribe audio data with optional AI polish.
@@ -33,34 +32,28 @@ class TranscribeAudioUseCase(
         return runCatching {
             onProgress("☁️ Transcribing...")
 
-            when (val stt = sttEngine.transcribe(audioData)) {
+            when (val result = cloudService.transcribe(audioData)) {
                 is TranscriptionResult.Success -> {
-                    val originalText = stt.text.trim()
+                    val originalText = result.text.trim()
 
                     // Apply AI polish if requested and text is substantial
                     val polishedText = if (mode == TranscriptionMode.WITH_AI_POLISH && originalText.length > 20) {
                         onProgress("✨ Polishing...")
-                        applyPolish(originalText).getOrNull()
+                        cloudService.polish(originalText)
                     } else {
                         null
                     }
                     
                     TranscriptionTexts(original = originalText, polished = polishedText)
                 }
-                is TranscriptionResult.Error -> throw Exception(stt.message)
+                is TranscriptionResult.Error -> throw Exception(result.message)
             }
         }
     }
 
     /**
      * Improve existing text with AI polish.
+     * Used for re-polishing history items.
      */
-    suspend fun improveText(text: String): String? = applyPolish(text).getOrNull()
-
-    private suspend fun applyPolish(text: String): Result<String> {
-        if (!cleanupService.isAvailable()) {
-            return Result.failure(Exception("Service unavailable"))
-        }
-        return cleanupService.cleanupText(text)
-    }
+    suspend fun improveText(text: String): String? = cloudService.polish(text)
 }

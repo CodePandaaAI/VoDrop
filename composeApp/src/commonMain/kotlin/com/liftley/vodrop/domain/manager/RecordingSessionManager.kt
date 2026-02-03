@@ -79,8 +79,6 @@ class RecordingSessionManager(
                     return@launch
                 }
 
-                _state.update { AppState.Processing("☁️ Transcribing...") }
-
                 val result = transcribeUseCase(
                     audioData = audioData,
                     mode = currentMode,
