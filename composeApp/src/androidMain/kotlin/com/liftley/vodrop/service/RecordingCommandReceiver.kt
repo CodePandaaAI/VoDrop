@@ -1,6 +1,8 @@
 package com.liftley.vodrop.service
 
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -47,8 +49,8 @@ class RecordingCommandReceiver : BroadcastReceiver(), KoinComponent {
     }
     
     private fun copyToClipboard(context: Context, text: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("VoDrop Transcription", text)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("VoDrop Transcription", text)
         clipboard.setPrimaryClip(clip)
     }
 }

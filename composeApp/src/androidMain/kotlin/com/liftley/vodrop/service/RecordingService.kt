@@ -113,7 +113,7 @@ class RecordingService : Service() {
     }
 
     private fun updateNotification(notification: Notification) {
-        val manager = getSystemService(NotificationManager::class.java)
+        val manager = getSystemService<NotificationManager>()
         manager?.notify(NOTIFICATION_ID, notification)
     }
 
@@ -140,8 +140,7 @@ class RecordingService : Service() {
         }
         
         val manager = getSystemService<NotificationManager>()
-        manager?.createNotificationChannel(silentChannel)
-        manager?.createNotificationChannel(resultChannel)
+        manager?.createNotificationChannels(listOf(silentChannel, resultChannel))
     }
 
     private fun createRecordingNotification(): Notification {
