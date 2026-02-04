@@ -1,64 +1,27 @@
-# ═══════════════════════════════════════════════════════════
-# VoDrop ProGuard Rules (Simplified - Post SHA-1 Fix)
-# ═══════════════════════════════════════════════════════════
+# ═══ APIS & DATA (Crucial) ═══
+# This protects your API response models from being renamed/deleted
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
 
-# ═══ CORE ANDROID ═══
--keepattributes *Annotation*
--keepattributes Signature
--keepattributes InnerClasses
--keepattributes EnclosingMethod
+-keepclassmembers class ** {
+    @kotlinx.serialization.SerialName <fields>;}
 
-# Keep native methods (standard Android)
--keepclasseswithmembernames class * {
-    native <methods>;
-}
+# ═══ SQLDELIGHT ═══
+# Use your actual package name here
+-keep class com.liftley.vodrop.db.** { *; }
 
-# Keep Parcelable (used by Android & Credential Manager)
--keepclassmembers class * implements android.os.Parcelable {
-    public static final android.os.Parcelable$Creator CREATOR;
-}
-
-# ═══ KOTLINX SERIALIZATION (For Groq/Gemini API) ═══
--keep class kotlinx.serialization.** { *; }
+# ═══ KOTLIN SERIALIZATION ═══
 -keepclassmembers @kotlinx.serialization.Serializable class ** {
     *** Companion;
     *** INSTANCE;
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Keep your API data classes
--keep class com.liftley.vodrop.data.stt.GroqWhisperService$* { *; }
--keep class com.liftley.vodrop.data.llm.GeminiCleanupService$* { *; }
+# ═══ FIREBASE / GMS ═══
+# Most Firebase libraries provide their own rules.
+# Only add these if you experience crashes in RELEASE builds.
+# -keep class com.google.firebase.** { *; }
+# -keep class com.google.android.gms.** { *; }
 
-# ═══ SEALED CLASSES (For when expressions) ═══
--keep class com.liftley.vodrop.data.stt.TranscriptionState$* { *; }
--keep class com.liftley.vodrop.data.audio.RecordingStatus$* { *; }
-
-# ═══ SQLDELIGHT ═══
--keep class com.liftley.vodrop.db.** { *; }
-
-# ═══ FIREBASE (Core + Auth + Firestore) ═══
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.firebase.**
--dontwarn com.google.android.gms.**
-
-# Keep your UserData model
--keep class com.liftley.vodrop.data.firestore.UserData { *; }
--keep class com.liftley.vodrop.auth.User { *; }
-
-# ═══ CREDENTIAL MANAGER (Google Sign-In) ═══
--keep class androidx.credentials.** { *; }
--keep class com.google.android.libraries.identity.googleid.** { *; }
--dontwarn androidx.credentials.**
--dontwarn com.google.android.libraries.identity.googleid.**
-
-# ═══ REVENUECAT ═══
--keep class com.revenuecat.purchases.** { *; }
--dontwarn com.revenuecat.**
-
-# ═══ SUPPRESS COMMON WARNINGS ═══
--dontwarn okhttp3.internal.platform.**
+# ═══ GENERAL HOUSEKEEPING ═══
+-dontwarn okhttp3.**
 -dontwarn org.conscrypt.**
--dontwarn org.bouncycastle.**
--dontwarn org.openjsse.**

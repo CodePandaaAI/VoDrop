@@ -1,60 +1,63 @@
 package com.liftley.vodrop
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.liftley.vodrop.auth.PlatformAuth
-import com.liftley.vodrop.di.appModule
-import com.liftley.vodrop.di.platformModule
-import kotlinx.coroutines.launch
+import com.liftley.vodrop.service.ServiceController
 import org.koin.android.ext.android.inject
-import org.koin.android.ext.koin.androidContext
-import org.koin.android.ext.koin.androidLogger
-import org.koin.core.context.GlobalContext.startKoin
 
 class MainActivity : ComponentActivity() {
 
-    private val platformAuth: PlatformAuth by inject()
+    private val serviceController: ServiceController by inject()
 
     private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) Toast.makeText(this, "Microphone permission required", Toast.LENGTH_LONG).show()
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        if (!micGranted) {
+            Toast.makeText(this, "Microphone permission required", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        initKoin()
-        platformAuth.setActivity(this)
-        platformAuth.initialize()
-        requestMicPermission()
-
-        lifecycleScope.launch { platformAuth.initializeAccess() }
-
+        requestPermissionsIfNeeded()
+        // Start service immediately so it's ready for recording
+        serviceController.startForeground()
         setContent { App() }
     }
 
-    private fun initKoin() {
-        try {
-            startKoin {
-                androidLogger()
-                androidContext(this@MainActivity)
-                modules(appModule, platformModule)
-            }
-        } catch (_: Exception) { /* Already started */ }
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop service when app is closed (not just backgrounded)
+        if (isFinishing) {
+            serviceController.stopForeground()
+        }
     }
 
-    private fun requestMicPermission() {
+    private fun requestPermissionsIfNeeded() {
+        val permissionsToRequest = mutableListOf<String>()
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
 }

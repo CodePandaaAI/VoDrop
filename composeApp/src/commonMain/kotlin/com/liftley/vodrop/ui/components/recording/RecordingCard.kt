@@ -1,5 +1,6 @@
 package com.liftley.vodrop.ui.components.recording
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,16 +9,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,34 +26,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.ui.main.RecordingPhase
-import com.liftley.vodrop.ui.main.TranscriptionMode
+import com.liftley.vodrop.domain.model.AppState
+import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * Recording card that displays based on AppState.
+ * Single source of truth - no internal state translation.
+ */
 @Composable
 fun RecordingCard(
-    phase: RecordingPhase,
-    currentTranscription: String,
-    progressMessage: String,
-    mode: TranscriptionMode,
-    error: String?,
+    appState: AppState,
     onRecordClick: () -> Unit,
+    onCancel: () -> Unit,
     onClearError: () -> Unit,
-    onCopy: () -> Unit
+    onCopyAndReset: (String) -> Unit
 ) {
-    val (title, subtitle) = when (phase) {
-        RecordingPhase.LISTENING -> "Listening..." to "Tap to stop"
-        RecordingPhase.PROCESSING -> "Processing..." to progressMessage.ifEmpty { "Please wait..." }
-        RecordingPhase.READY -> "Ready" to "Tap to record"
-        else -> "Getting Ready..." to "Connecting..."
+    val (title, subtitle) = when (appState) {
+        is AppState.Recording -> "Recording..." to "Tap to stop"
+        is AppState.Processing -> "Processing..." to "Please wait"
+        is AppState.Error -> "Error" to "Something went wrong"
+        is AppState.Success -> "Done!" to "Your transcription is ready"
+        else -> "Ready" to "Tap to record"
     }
 
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(32.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth().padding(Dimens.small16),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -62,7 +64,7 @@ fun RecordingCard(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Dimens.extraSmall8))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.titleMedium,
@@ -70,67 +72,98 @@ fun RecordingCard(
                 textAlign = TextAlign.Center
             )
 
-            if (phase == RecordingPhase.READY || phase == RecordingPhase.LISTENING) {
-                Spacer(Modifier.height(16.dp))
-                Surface(
-                    color = if (mode == TranscriptionMode.WITH_AI_POLISH) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(20.dp)
+            Spacer(Modifier.height(Dimens.huge48))
+            RecordButton(appState, onRecordClick, 144.dp)
+
+            // Cancel button during recording or processing
+            if (appState is AppState.Recording || appState is AppState.Processing) {
+                Spacer(Modifier.height(Dimens.small16))
+                Button(
+                    onClick = onCancel,
+                    colors = ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.size(height = 56.dp, width = 132.dp)
                 ) {
                     Text(
-                        if (mode == TranscriptionMode.WITH_AI_POLISH) "✨ AI Polish" else "🎤 Standard",
-                        Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                        fontWeight = FontWeight.SemiBold
+                        "Cancel",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
 
-            Spacer(Modifier.height(40.dp))
-            RecordButton(phase, onRecordClick, 160.dp)
+            // Processing progress indicator
+            if (appState is AppState.Processing) {
+                Spacer(Modifier.height(Dimens.large24))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        Modifier.size(Dimens.large24),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(Dimens.small16))
+                    Text(
+                        appState.message.ifEmpty { "Working on it..." },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
 
-            if (currentTranscription.isNotEmpty()) {
-                Spacer(Modifier.height(40.dp))
+            // Success result display
+            if (appState is AppState.Success) {
+                Spacer(Modifier.height(Dimens.huge48))
                 Card(
                     Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
+                    shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     )
                 ) {
-                    Column(Modifier.padding(28.dp)) {
-                        Text(currentTranscription, style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(20.dp))
-                        FilledTonalButton(
-                            onClick = onCopy,
+                    Column(
+                        Modifier.fillMaxWidth().padding(Dimens.small16),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Dimens.large24)
+                    ) {
+                        Text(
+                            appState.text,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Button(
+                            onClick = { onCopyAndReset(appState.text) },
                             Modifier.align(Alignment.End),
-                            shape = RoundedCornerShape(20.dp)
+                            shape = MaterialTheme.shapes.medium,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Copy")
+                            Icon(
+                                Icons.Rounded.ContentCopy,
+                                null,
+                                Modifier.size(Dimens.large24),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.width(Dimens.small16))
+                            Text(
+                                "Copy",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                 }
             }
 
-            if (phase == RecordingPhase.PROCESSING && progressMessage.isNotEmpty()) {
-                Spacer(Modifier.height(24.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Text(progressMessage, style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-
-            error?.let {
-                Spacer(Modifier.height(24.dp))
+            // Error display
+            if (appState is AppState.Error) {
+                Spacer(Modifier.height(Dimens.large24))
                 Card(
                     Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                 ) {
-                    Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.padding(Dimens.large24),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            it,
+                            appState.message,
                             Modifier.weight(1f),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

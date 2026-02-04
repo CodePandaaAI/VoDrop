@@ -1,123 +1,194 @@
 package com.liftley.vodrop.ui.components.history
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.domain.model.Transcription
+import com.liftley.vodrop.ui.components.reusable.HistoryCardButton
+import com.liftley.vodrop.ui.theme.Dimens
 
-/**
- * Stateless card displaying a transcription with action buttons.
- * Pure UI - no business logic, no clipboard access.
- */
 @Composable
 fun HistoryCard(
     transcription: Transcription,
-    isPro: Boolean,
     isImproving: Boolean,
-    onCopy: () -> Unit,
-    onEdit: () -> Unit,
+    onCopy: (String) -> Unit,
+    onEditOriginal: () -> Unit,
+    onEditPolished: () -> Unit,
     onDelete: () -> Unit,
     onImproveWithAI: () -> Unit
 ) {
+    // Track which version is being viewed - key ensures reset when transcription changes
+    var showPolished by remember(transcription.id, transcription.hasPolished) { 
+        mutableStateOf(transcription.hasPolished) 
+    }
+    
+    // Current text based on selected tab
+    val displayText = if (showPolished && transcription.polishedText != null) {
+        transcription.polishedText
+    } else {
+        transcription.originalText
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(20.dp)) {
-            // Timestamp
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.AccessTime, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(6.dp))
-                Text(transcription.timestamp, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Text content
-            Text(transcription.text, style = MaterialTheme.typography.bodyLarge)
-
-            Spacer(Modifier.height(16.dp))
-
-            // AI Improve button
-            Button(
-                onClick = onImproveWithAI,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = !isImproving,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            ) {
-                if (isImproving) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Improving...")
-                } else {
-                    Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Improve with AI", fontWeight = FontWeight.SemiBold)
-                    if (!isPro) {
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiary,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                "PRO",
-                                Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onTertiary
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Action buttons - icons only for compact layout
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Copy button
-                FilledTonalButton(
-                    onClick = onCopy,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(12.dp)
+        Column(
+            Modifier
+                .padding(Dimens.small16)
+                .animateContentSize()
+        ) {
+            // Version Toggle (only show if polished exists)
+            if (transcription.hasPolished) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Rounded.ContentCopy, "Copy", Modifier.size(18.dp))
-                }
-
-                // Edit button
-                FilledTonalButton(
-                    onClick = onEdit,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Rounded.Edit, "Edit", Modifier.size(18.dp))
-                }
-
-                // Delete button
-                FilledTonalButton(
-                    onClick = onDelete,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    FilterChip(
+                        selected = !showPolished,
+                        onClick = { showPolished = false },
+                        label = { Text("Original") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                     )
+                    FilterChip(
+                        selected = showPolished,
+                        onClick = { showPolished = true },
+                        label = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Rounded.AutoAwesome, 
+                                    null, 
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Polished")
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    )
+                }
+                Spacer(Modifier.height(Dimens.extraSmall8))
+            }
+
+            // Transcription text
+            Text(
+                displayText,
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Spacer(Modifier.height(Dimens.small16))
+
+            // Action buttons row
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Copy (copies current view)
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topEnd = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8)
+                    ),
+                    onClick = { onCopy(displayText) },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Rounded.Delete, "Delete", Modifier.size(18.dp))
+                    Icon(
+                        Icons.Rounded.ContentCopy,
+                        "Copy",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // Edit (works for both original and polished)
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topEnd = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8),
+                        topStart = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8)
+                    ),
+                    modifier = Modifier.weight(1f),
+                    onClick = if (showPolished) onEditPolished else onEditOriginal,
+                ) {
+                    Icon(Icons.Rounded.Edit, "Edit", tint = MaterialTheme.colorScheme.onSurface)
+                }
+
+                // Delete
+                HistoryCardButton(
+                    shapes = MaterialTheme.shapes.medium.copy(
+                        topStart = CornerSize(Dimens.extraSmall8),
+                        bottomStart = CornerSize(Dimens.extraSmall8),
+                        bottomEnd = CornerSize(Dimens.extraSmall8)
+                    ),
+                    modifier = Modifier.weight(1f),
+                    onClick = onDelete
+                ) {
+                    Icon(Icons.Rounded.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            // AI Polish button (shows on polished tab OR if no polish exists yet)
+            if (showPolished || !transcription.hasPolished) {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onImproveWithAI,
+                    enabled = !isImproving,
+                    colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.surfaceContainer),
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isImproving) {
+                        CircularProgressIndicator(Modifier.size(Dimens.large24), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Rounded.AutoAwesome,
+                            null,
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(Modifier.width(Dimens.small16))
+                    Text(
+                        if (transcription.hasPolished) "Re-polish with AI" else "AI Polish",
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }

@@ -6,43 +6,37 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.util.Log
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.ByteArrayOutputStream
-import kotlin.concurrent.thread
-import kotlin.math.abs
-import kotlin.math.log10
+
+private const val TAG = "AudioRecorder"
 
 /**
- * Android audio recorder using AudioRecord API
- * Produces 48kHz, mono, 16-bit PCM audio (Native Android Quality)
+ * Android audio recorder using AudioRecord API.
+ * Produces 16kHz, mono, 16-bit PCM audio.
  *
- * OPTIMIZED: Pre-sized buffer to avoid reallocations
+ * PURE RECORDER: No state exposure, no service knowledge.
+ * Just records bytes and returns them.
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
     private val context: Context by inject()
 
-    private val _status = MutableStateFlow<RecordingStatus>(RecordingStatus.Idle)
-    override val status: StateFlow<RecordingStatus> = _status.asStateFlow()
-
     private var audioRecord: AudioRecord? = null
-    @Volatile
-    private var isCurrentlyRecording = false
-    private var recordingThread: Thread? = null
+    private var recordingJob: Job? = null
 
-    // ⚡ OPTIMIZED: Pre-sized for ~30 seconds of audio at 48kHz
-    // 30s × 48000Hz × 2 bytes = 2,880,000 bytes (~2.8 MB)
-    // This prevents reallocations during recording which causes GC lag
-    private var audioData = ByteArrayOutputStream(2_880_000)
-
-    private val lock = Any()
+    // ~30 seconds at 16kHz mono 16-bit = 16000 * 2 * 30 = 960,000 bytes
+    private var audioData = ByteArrayOutputStream(960_000)
 
     companion object {
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -50,159 +44,123 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     }
 
     override suspend fun startRecording() {
-        if (isCurrentlyRecording) {
-            throw AudioRecorderException("Already recording")
+        Log.d(TAG, "startRecording() called")
+
+        if (recordingJob?.isActive == true) {
+            Log.d(TAG, "startRecording() called while already recording, ignoring.")
+            return
         }
 
-        // Check permission
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             throw AudioRecorderException("MICROPHONE permission not granted")
         }
 
         withContext(Dispatchers.IO) {
-            try {
-                // Get strictly valid buffer size for 48kHz
-                val minBufferSize = AudioRecord.getMinBufferSize(
-                    AudioConfig.SAMPLE_RATE,
-                    CHANNEL_CONFIG,
-                    AUDIO_FORMAT
-                )
+            val minBufferSize = AudioRecord.getMinBufferSize(
+                AudioConfig.SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT
+            )
 
-                // Safety: Ensure buffer is at least ~8ms of audio
-                val bufferSize = if (minBufferSize > 0) minBufferSize * 2 else 4096
+            if (minBufferSize <= 0) {
+                throw AudioRecorderException("Device doesn't support this audio configuration")
+            }
 
-                synchronized(lock) {
-                    @Suppress("MissingPermission")
-                    audioRecord = AudioRecord(
-                        MediaRecorder.AudioSource.MIC,
-                        AudioConfig.SAMPLE_RATE,
-                        CHANNEL_CONFIG,
-                        AUDIO_FORMAT,
-                        bufferSize
-                    ).also { record ->
-                        if (record.state != AudioRecord.STATE_INITIALIZED) {
-                            record.release()
-                            throw AudioRecorderException("Failed to initialize AudioRecord")
-                        }
-                    }
+            val bufferSize = minBufferSize * 2
 
-                    // ⚡ OPTIMIZED: Reset but keep the buffer capacity
-                    audioData.reset()
-                    isCurrentlyRecording = true
-                    audioRecord?.startRecording()
-                    _status.value = RecordingStatus.Recording(0f)
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                AudioConfig.SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize
+            ).also { record ->
+                if (record.state != AudioRecord.STATE_INITIALIZED) {
+                    record.release()
+                    throw AudioRecorderException("Failed to initialize AudioRecord")
                 }
+            }
 
-                // Start recording thread
-                recordingThread = thread(name = "VoDrop-AudioRecorder") {
-                    val buffer = ByteArray(bufferSize)
+            audioData.reset()
+            audioRecord?.startRecording()
 
-                    while (isCurrentlyRecording) {
-                        val record = audioRecord ?: break
-                        val bytesRead = record.read(buffer, 0, buffer.size)
+            Log.d(TAG, "Recording started at ${AudioConfig.SAMPLE_RATE}Hz")
 
-                        if (bytesRead > 0) {
-                            synchronized(lock) {
-                                audioData.write(buffer, 0, bytesRead)
-                            }
+            // Launch recording coroutine
+            recordingJob = CoroutineScope(Dispatchers.IO).launch {
+                val buffer = ByteArray(bufferSize)
 
-                            // Calculate amplitude for UI feedback
-                            val amplitude = calculateAmplitudeDb(buffer, bytesRead)
-                            _status.value = RecordingStatus.Recording(amplitude)
-                        } else if (bytesRead == AudioRecord.ERROR_INVALID_OPERATION) {
-                            _status.value = RecordingStatus.Error("Recording error: invalid operation")
-                            isCurrentlyRecording = false
+                while (isActive) {
+                    val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: break
+
+                    when {
+                        bytesRead > 0 -> {
+                            audioData.write(buffer, 0, bytesRead)
+                        }
+
+                        bytesRead == AudioRecord.ERROR_INVALID_OPERATION -> {
+                            Log.e(TAG, "Recording error: invalid operation")
                             break
-                        } else if (bytesRead == AudioRecord.ERROR_BAD_VALUE) {
-                            _status.value = RecordingStatus.Error("Recording error: bad value")
-                            isCurrentlyRecording = false
+                        }
+
+                        bytesRead == AudioRecord.ERROR_BAD_VALUE -> {
+                            Log.e(TAG, "Recording error: bad value")
                             break
                         }
                     }
                 }
-            } catch (e: SecurityException) {
-                _status.value = RecordingStatus.Error("Permission denied")
-                throw AudioRecorderException("Microphone permission denied", e)
-            } catch (e: Exception) {
-                _status.value = RecordingStatus.Error("Recording error: ${e.message}")
-                throw AudioRecorderException("Failed to start recording", e)
             }
         }
+    }
+
+    override suspend fun cancelRecording() {
+        Log.d(TAG, "cancelRecording() called")
+        stopInternalWithoutData()
     }
 
     override suspend fun stopRecording(): ByteArray {
-        if (!isCurrentlyRecording) {
+        Log.d(TAG, "stopRecording() called")
+
+        if (recordingJob?.isActive != true) {
             throw AudioRecorderException("Not currently recording")
         }
 
+        val data = stopInternalWithData()
+        Log.d(TAG, "Recording stopped, ${data.size} bytes captured")
+        return data
+    }
+
+    private suspend fun stopInternalWithData(): ByteArray {
+        recordingJob?.cancelAndJoin()
+        recordingJob = null
+
         return withContext(Dispatchers.IO) {
-            synchronized(lock) {
-                isCurrentlyRecording = false
-            }
-
-            // Wait for recording thread to finish
-            recordingThread?.let { thread ->
-                thread.join(2000)
-                if (thread.isAlive) {
-                    thread.interrupt()  // Force interrupt if still running
-                }
-            }
-            recordingThread = null
-
-            synchronized(lock) {
-                audioRecord?.stop()
-                audioRecord?.release()
-                audioRecord = null
-
-                _status.value = RecordingStatus.Idle
-
-                val data = audioData.toByteArray()
-                // Reset buffer to free memory if needed, or keep for next time
-                // audioData.reset()
-                data
-            }
+            audioRecord?.stop()
+            audioRecord?.release()
+            audioRecord = null
+            val data = audioData.toByteArray()
+            audioData.reset()
+            data
         }
     }
 
-    override fun isRecording(): Boolean = isCurrentlyRecording
+    private suspend fun stopInternalWithoutData() {
+        recordingJob?.cancelAndJoin()
+        recordingJob = null
 
-    override fun release() {
-        synchronized(lock) {
-            isCurrentlyRecording = false
-            recordingThread?.interrupt()
-            recordingThread = null
+        withContext(Dispatchers.IO) {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
             audioData.reset()
-            _status.value = RecordingStatus.Idle
         }
     }
 
-    /**
-     * Calculate amplitude in dB from audio buffer for visual feedback
-     */
-    private fun calculateAmplitudeDb(buffer: ByteArray, bytesRead: Int): Float {
-        var sum = 0.0
-        val samples = bytesRead / 2
-
-        for (i in 0 until samples) {
-            val low = buffer[i * 2].toInt() and 0xFF
-            val high = buffer[i * 2 + 1].toInt()
-            val sample = (high shl 8) or low
-            sum += abs(sample).toDouble()
-        }
-
-        val average = if (samples > 0) sum / samples else 0.0
-        val normalized = average / 32768.0
-
-        return if (normalized > 0.0001) {
-            (20 * log10(normalized)).toFloat().coerceIn(-60f, 0f)
-        } else {
-            -60f
-        }
-    }
+    override fun isRecording(): Boolean = recordingJob?.isActive == true
 }
 
 actual fun createAudioRecorder(): AudioRecorder = AndroidAudioRecorder()

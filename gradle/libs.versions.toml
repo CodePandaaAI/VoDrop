@@ -1,20 +1,12 @@
 [versions]
 agp = "8.9.3"
 android-compileSdk = "36"
-android-minSdk = "24"
+android-minSdk = "30"
 android-targetSdk = "36"
 androidx-activity = "1.10.0"
-androidx-appcompat = "1.7.0"
-androidx-core = "1.15.0"
-androidx-espresso = "3.6.1"
-firebase-bom = "33.7.0"
-play-services-auth = "21.2.0"
-revenuecat = "8.6.0"
-
-# Use JetBrains lifecycle 2.8.4 which matches Compose 1.8.x
+firebase-bom = "34.8.0"
+kotlinxSerializationJson = "1.7.3"
 androidx-lifecycle = "2.8.4"
-
-# Updated Compose to 1.8.0 for Kotlin 2.1.21 compatibility
 compose-multiplatform = "1.7.3"
 kotlin = "2.1.21"
 kotlinx-coroutines = "1.10.1"
@@ -23,17 +15,12 @@ sqldelight = "2.0.2"
 koin = "4.0.2"
 accompanist = "0.36.0"
 kotlinx-datetime = "0.6.1"
-whisper-jni = "1.7.1"
 ktor = "3.0.3"
-credentials = "1.5.0"
 
 
 [libraries]
-firebase-firestore-ktx = { module = "com.google.firebase:firebase-firestore-ktx" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
-androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
-androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
@@ -41,6 +28,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 
 # SQLDelight
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
@@ -71,17 +59,9 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 
 # Firebase
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
-firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
-play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
-firebase-functions-ktx = { module = "com.google.firebase:firebase-functions-ktx" }
-
-# Credential Manager (new Google Sign-In)
-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
-
-googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version = "1.1.1" }
-# RevenueCat
-revenuecat-purchases = { module = "com.revenuecat.purchases:purchases", version.ref = "revenuecat" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
+firebase-functions = { module = "com.google.firebase:firebase-functions" }
+firebase-storage = { module = "com.google.firebase:firebase-storage" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

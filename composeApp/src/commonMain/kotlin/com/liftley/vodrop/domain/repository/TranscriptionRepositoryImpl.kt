@@ -1,20 +1,18 @@
 package com.liftley.vodrop.domain.repository
 
-import app.cash.sqldelight.coroutines.asFlow
-import app.cash.sqldelight.coroutines.mapToList
 import com.liftley.vodrop.db.VoDropDatabase
 import com.liftley.vodrop.domain.model.Transcription
+import com.liftley.vodrop.util.DateTimeUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import kotlinx.coroutines.IO
 
-/**
- * SQLDelight implementation of TranscriptionRepository
- */
 class TranscriptionRepositoryImpl(
-    database: VoDropDatabase
+    private val database: VoDropDatabase
 ) : TranscriptionRepository {
 
     private val queries = database.transcriptionQueries
@@ -23,26 +21,39 @@ class TranscriptionRepositoryImpl(
         return queries.selectAll()
             .asFlow()
             .mapToList(Dispatchers.IO)
-            .map { list ->
-                list.map { entity ->
+            .map { entities ->
+                entities.map { entity ->
                     Transcription(
                         id = entity.id,
                         timestamp = entity.timestamp,
-                        text = entity.text
+                        originalText = entity.originalText,
+                        polishedText = entity.polishedText
                     )
                 }
             }
     }
 
-    override suspend fun insertTranscription(timestamp: String, text: String) {
-        withContext(Dispatchers.IO) {
-            queries.insertItem(timestamp, text)
+    override suspend fun saveTranscription(originalText: String, polishedText: String?): Boolean {
+        if (originalText.isBlank() || originalText == "(No speech detected)") {
+            return false
+        }
+
+        return withContext(Dispatchers.IO) {
+            val timestamp = DateTimeUtils.formatCurrentTimestamp()
+            queries.insertItem(timestamp, originalText, polishedText)
+            true
         }
     }
 
-    override suspend fun updateTranscription(id: Long, text: String) {
+    override suspend fun updateOriginalText(id: Long, text: String) {
         withContext(Dispatchers.IO) {
-            queries.updateText(text, id)
+            queries.updateOriginalText(text, id)
+        }
+    }
+
+    override suspend fun updatePolishedText(id: Long, text: String) {
+        withContext(Dispatchers.IO) {
+            queries.updatePolishedText(text, id)
         }
     }
 

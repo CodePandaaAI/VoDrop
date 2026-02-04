@@ -1,84 +1,96 @@
 package com.liftley.vodrop.ui.main
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.liftley.vodrop.ui.components.history.EmptyState
+import com.liftley.vodrop.ui.components.history.HistoryCard
+import com.liftley.vodrop.ui.components.mode.TranscriptionModeSheet
 import com.liftley.vodrop.ui.components.profile.AppDrawerContent
-import com.liftley.vodrop.ui.components.history.*
 import com.liftley.vodrop.ui.components.recording.RecordingCard
+import com.liftley.vodrop.ui.components.reusable.ExpressiveIconButton
+import com.liftley.vodrop.ui.components.reusable.TranscriptionModeBox
+import com.liftley.vodrop.ui.theme.Dimens
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import vodrop.composeapp.generated.resources.Res
+import vodrop.composeapp.generated.resources.status_text
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(
-    viewModel: MainViewModel,
-    onLoginClick: () -> Unit = {},
-    onSignOut: () -> Unit = {},
-    onPurchaseMonthly: () -> Unit = {},
-    monthlyPrice: String = "$2.99"
-) {
-    val state by viewModel.uiState.collectAsState()
-    val clipboard = LocalClipboardManager.current
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+fun MainScreen(viewModel: MainViewModel) {
+    val appState by viewModel.appState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    // Sync drawer with ViewModel
-    LaunchedEffect(state.isDrawerOpen) { if (state.isDrawerOpen) drawerState.open() else drawerState.close() }
-    LaunchedEffect(drawerState.currentValue) { if (drawerState.isClosed) viewModel.closeDrawer() }
+    val clipboard = LocalClipboardManager.current
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    // Mode selection bottom sheet state
+    val modeSheetState = rememberModalBottomSheetState()
+
+    HardwareBackHandler(drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             AppDrawerContent(
-                isLoggedIn = state.isLoggedIn,
-                isPro = state.isPro,
-                statusText = state.statusText,
-                onSignIn = { viewModel.closeDrawer(); onLoginClick() },
-                onSignOut = { viewModel.closeDrawer(); onSignOut() },
-                onClose = { viewModel.closeDrawer() }
+                statusText = stringResource(Res.string.status_text),
+                onClose = { scope.launch { drawerState.close() } }
             )
-        }
+        },
+        gesturesEnabled = true
     ) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
             topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                    title = { Text("VoDrop", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { viewModel.openDrawer() }) {
-                            Icon(Icons.Default.Menu, "Menu", Modifier.size(28.dp))
+                CenterAlignedTopAppBar(
+                    modifier = Modifier.padding(horizontal = Dimens.extraSmall8),
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    title = {
+                        // Centered pill with app name + mode + dropdown
+                        TranscriptionModeBox(currentMode = viewModel.currentMode.displayName) {
+                            viewModel.showModeSheet()
                         }
                     },
-                    actions = {
-                        FilterChip(
-                            selected = state.transcriptionMode == TranscriptionMode.WITH_AI_POLISH,
-                            onClick = {
-                                if (state.isPro) viewModel.selectMode(if (state.transcriptionMode == TranscriptionMode.STANDARD) TranscriptionMode.WITH_AI_POLISH else TranscriptionMode.STANDARD)
-                                else viewModel.showUpgradeDialog()
-                            },
-                            label = {
-                                Text(
-                                    state.transcriptionMode.displayName,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            enabled = state.isLoggedIn,
-                            shape = MaterialTheme.shapes.extraLarge,
-                            border = null,
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                            ),
-                            modifier = Modifier.height(48.dp).padding(end = 8.dp)
+                    navigationIcon = {
+                        ExpressiveIconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Menu"
                         )
                     }
                 )
@@ -86,22 +98,25 @@ fun MainScreen(
         ) { padding ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                contentPadding = PaddingValues(
+                    vertical = Dimens.large24,
+                    horizontal = Dimens.small16
+                ),
+                verticalArrangement = Arrangement.spacedBy(Dimens.large24)
             ) {
                 item {
                     RecordingCard(
-                        phase = state.recordingPhase,
-                        currentTranscription = state.currentTranscription,
-                        progressMessage = state.progressMessage,
-                        mode = state.transcriptionMode,
-                        error = state.error,
+                        appState = appState,
                         onRecordClick = viewModel::onRecordClick,
+                        onCancel = viewModel::onCancel,
                         onClearError = viewModel::clearError,
-                        onCopy = { clipboard.setText(AnnotatedString(state.currentTranscription)) }
+                        onCopyAndReset = { text ->
+                            clipboard.setText(AnnotatedString(text))
+                            viewModel.clearError() // resetState via clearError
+                        }
                     )
                 }
-                if (state.history.isEmpty()) {
+                if (uiState.history.isEmpty()) {
                     item { EmptyState() }
                 } else {
                     item {
@@ -111,13 +126,13 @@ fun MainScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    items(state.history, key = { it.id }) { item ->
+                    items(uiState.history, key = { it.id }) { item ->
                         HistoryCard(
                             transcription = item,
-                            isPro = state.isPro,
-                            isImproving = state.improvingId == item.id,
-                            onCopy = { clipboard.setText(AnnotatedString(item.text)) },
-                            onEdit = { viewModel.startEdit(item) },
+                            isImproving = uiState.improvingId == item.id,
+                            onCopy = { text -> clipboard.setText(AnnotatedString(text)) },
+                            onEditOriginal = { viewModel.startEditOriginal(item) },
+                            onEditPolished = { viewModel.startEditPolished(item) },
                             onDelete = { viewModel.requestDelete(item.id) },
                             onImproveWithAI = { viewModel.onImproveWithAI(item) }
                         )
@@ -127,8 +142,22 @@ fun MainScreen(
         }
     }
 
-    // Dialogs
-    if (state.deleteConfirmationId != null) {
+    // Mode Selection Bottom Sheet
+    if (uiState.showModeSheet) {
+        TranscriptionModeSheet(
+            sheetState = modeSheetState,
+            currentMode = viewModel.currentMode,
+            onModeSelected = { mode ->
+                scope.launch { modeSheetState.hide() }.invokeOnCompletion {
+                    viewModel.selectMode(mode)
+                }
+            },
+            onDismiss = { viewModel.hideModeSheet() }
+        )
+    }
+
+    // Delete Dialog
+    if (uiState.deleteConfirmationId != null) {
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
             title = { Text("Delete?", fontWeight = FontWeight.Bold) },
@@ -144,13 +173,15 @@ fun MainScreen(
         )
     }
 
-    state.editingTranscription?.let {
+    // Edit Dialog
+    uiState.editingTranscription?.let {
+        val editTitle = if (uiState.isEditingPolished) "Edit Polished" else "Edit Original"
         AlertDialog(
             onDismissRequest = viewModel::cancelEdit,
-            title = { Text("Edit", fontWeight = FontWeight.Bold) },
+            title = { Text(editTitle, fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
-                    state.editText,
+                    uiState.editText,
                     viewModel::updateEditText,
                     Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large
@@ -158,35 +189,6 @@ fun MainScreen(
             },
             confirmButton = { Button(onClick = viewModel::saveEdit) { Text("Save") } },
             dismissButton = { TextButton(onClick = viewModel::cancelEdit) { Text("Cancel") } },
-            shape = MaterialTheme.shapes.extraLarge
-        )
-    }
-
-    if (state.showUpgradeDialog) {
-        AlertDialog(
-            onDismissRequest = viewModel::hideUpgradeDialog,
-            icon = {
-                Icon(
-                    Icons.Default.Person,
-                    null,
-                    Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = { Text("Unlock Pro", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "Unlimited transcriptions and AI Polish for $monthlyPrice/month.",
-                    textAlign = TextAlign.Center
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.hideUpgradeDialog(); onPurchaseMonthly() },
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                ) { Text("Upgrade Now") }
-            },
-            dismissButton = { TextButton(onClick = viewModel::hideUpgradeDialog) { Text("Maybe Later") } },
             shape = MaterialTheme.shapes.extraLarge
         )
     }

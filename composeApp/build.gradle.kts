@@ -51,20 +51,11 @@ kotlin {
             implementation(libs.accompanist.permissions)
             implementation(libs.ktor.client.okhttp)
 
-            // Firebase Auth
+            // Firebase
             implementation(project.dependencies.platform(libs.firebase.bom))
-            implementation(libs.firebase.auth.ktx)
-            implementation(libs.play.services.auth)
-            implementation(libs.firebase.firestore.ktx)
-            implementation(libs.firebase.functions.ktx)
-
-            // RevenueCat
-            implementation(libs.revenuecat.purchases)
-
-            // Credential Manager (new Google Sign-In)
-            implementation(libs.credentials)
-            implementation(libs.credentials.play.services)
-            implementation(libs.googleid)
+            implementation(libs.firebase.auth)
+            implementation(libs.firebase.functions)
+            implementation(libs.firebase.storage)
         }
 
         commonMain.dependencies {
@@ -84,7 +75,7 @@ kotlin {
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.datetime)
             implementation(libs.ktor.client.core)
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+            implementation(libs.kotlinx.serialization.json)
         }
 
         commonTest.dependencies {
@@ -144,7 +135,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release") // ✅ Now this works!
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

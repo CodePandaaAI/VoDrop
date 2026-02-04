@@ -1,50 +1,60 @@
 package com.liftley.vodrop.ui.components.recording
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.liftley.vodrop.ui.main.RecordingPhase
+import com.liftley.vodrop.domain.model.AppState
 
 /**
- * Record button with different states
- * Material 3 Expressive: Big, bold, flat (no animations)
+ * Record button with different states based on AppState.
+ * Shows waveform animation during recording.
  */
 @Composable
 fun RecordButton(
-    phase: RecordingPhase,
+    appState: AppState,
     onClick: () -> Unit,
-    size: Dp = 160.dp, // Material 3 Expressive: Bigger default
+    size: Dp = 144.dp,
     modifier: Modifier = Modifier
 ) {
-    val isListening = phase == RecordingPhase.LISTENING
-    val isProcessing = phase == RecordingPhase.PROCESSING
-    val isEnabled = phase != RecordingPhase.PROCESSING
+    val isRecording = appState is AppState.Recording
+    val isProcessing = appState is AppState.Processing
+    val isEnabled = appState !is AppState.Processing
 
-    // Material 3 Expressive: Flat colors (no animations)
     val buttonColor = when {
-        isListening -> MaterialTheme.colorScheme.error
+        isRecording -> MaterialTheme.colorScheme.error
         isProcessing -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.primary
     }
 
     val iconColor = when {
-        isListening -> MaterialTheme.colorScheme.onError
+        isRecording -> MaterialTheme.colorScheme.onError
         isProcessing -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> MaterialTheme.colorScheme.onPrimary
     }
@@ -54,43 +64,95 @@ fun RecordButton(
             .size(size)
             .clip(CircleShape)
             .background(buttonColor)
-            .then(
-                if (isEnabled) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick
-                    )
-                } else {
-                    Modifier
-                }
+            .clickable(
+                enabled = isEnabled,
+                onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
         when {
             isProcessing -> {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(size * 0.45f), // Bigger
+                    modifier = Modifier.size(size * 0.45f),
                     color = iconColor,
-                    strokeWidth = 5.dp // Thicker
+                    strokeWidth = 5.dp
                 )
             }
-            isListening -> {
-                Icon(
-                    Icons.Rounded.Stop,
-                    contentDescription = "Stop recording",
-                    modifier = Modifier.size(size * 0.5f), // Bigger icon
-                    tint = iconColor
-                )
+
+            isRecording -> {
+                SimpleWaveform(color = MaterialTheme.colorScheme.surfaceContainer)
             }
+
             else -> {
-                Icon(
-                    Icons.Rounded.Mic,
-                    contentDescription = "Start recording",
-                    modifier = Modifier.size(size * 0.5f), // Bigger icon
-                    tint = iconColor
-                )
+                Icon(Icons.Rounded.Mic, "Record", Modifier.size(size * 0.5f), tint = iconColor)
             }
+        }
+    }
+}
+
+/**
+ * Simple waveform visualization with 5 bars.
+ */
+@Composable
+private fun SimpleWaveform(
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "Waveform")
+
+    val anim1 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar1"
+    )
+
+    val anim2 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(450, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar2"
+    )
+
+    val anim3 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bar3"
+    )
+
+    Canvas(
+        modifier = modifier.size(80.dp, 40.dp)
+    ) {
+        val barCount = 5
+        val spacing = 8.dp.toPx()
+        val totalSpacing = spacing * (barCount - 1)
+        val barWidth = (size.width - totalSpacing) / barCount
+        val maxHeight = size.height
+        val cornerRadius = CornerRadius(barWidth / 2, barWidth / 2)
+
+        val heights = listOf(anim1, anim2, anim3, anim2, anim1)
+
+        heights.forEachIndexed { index, heightFactor ->
+            val barHeight = maxHeight * heightFactor
+            val xOffset = index * (barWidth + spacing)
+            val yOffset = (maxHeight - barHeight) / 2
+
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(xOffset, yOffset),
+                size = Size(barWidth, barHeight),
+                cornerRadius = cornerRadius
+            )
         }
     }
 }
