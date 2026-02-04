@@ -11,8 +11,14 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 /**
- * BroadcastReceiver that handles notification button actions.
- * This decouples the Service from commanding the SessionManager.
+ * **Notification Action Receiver**
+ * 
+ * Intercepts button clicks from the Notification shade (Stop, Cancel, Copy).
+ * 
+ * **Pattern: Application Decoupling:**
+ * The Service cannot directly call [RecordingSessionManager] for logic flow reasons (Circular dependency / Threading).
+ * Instead, notifications fire PendingIntents that this Receiver catches.
+ * This Receiver then injects the SessionManager and safely executes the command.
  */
 class RecordingCommandReceiver : BroadcastReceiver(), KoinComponent {
     
@@ -43,6 +49,8 @@ class RecordingCommandReceiver : BroadcastReceiver(), KoinComponent {
             ACTION_COPY -> {
                 val text = intent.getStringExtra(EXTRA_TEXT) ?: ""
                 copyToClipboard(context, text)
+                
+                // Reset state so the notification can return to idle/ready
                 sessionManager.resetState()
             }
         }

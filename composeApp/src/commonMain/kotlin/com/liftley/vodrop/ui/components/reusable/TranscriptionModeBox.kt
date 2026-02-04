@@ -20,10 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.liftley.vodrop.ui.main.MainViewModel
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * **Mode Selection Pill**
+ * 
+ * Top Bar component displaying the current mode ("Standard" or "AI Polish").
+ * Clicking triggers the [TranscriptionModeSheet].
+ */
 @Composable
 fun TranscriptionModeBox(currentMode: String, onClick: () -> Unit) {
     Box(

@@ -30,6 +30,15 @@ import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.ui.main.TranscriptionMode
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * **Mode Selection Bottom Sheet**
+ * 
+ * Allows the user to choose between:
+ * 1. [TranscriptionMode.STANDARD]: Raw transcription only via Chirp 3.
+ * 2. [TranscriptionMode.WITH_AI_POLISH]: Chirp 3 + Gemini 3 Flash cleanup.
+ * 
+ * Persists choice in ViewModel.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranscriptionModeSheet(

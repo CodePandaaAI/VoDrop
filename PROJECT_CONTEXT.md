@@ -1,7 +1,7 @@
 # VoDrop - Project Context & Motive
 
 > **Last Updated:** February 4, 2026  
-> **Version:** Unified CloudTranscriptionService (STT + AI Polish merged)
+> **Version:** Hackathon Ready (v1.0)
 
 ---
 
@@ -147,6 +147,12 @@ AppState ← cycle continues
 - **History**: `TranscriptionRepository.getAllTranscriptions()`
 - **UI dialogs**: `MainUiState` (ViewModel)
 
+### 4. Reactive UI & Service
+Both the **UI** (Jetpack Compose) and the **Foreground Service** are pure consumers of `AppState`.
+- The Service automatically updates the notification when `AppState` changes to `Recording` or `Processing`.
+- The UI automatically shows the waveform or spinner.
+- Neither component knows about the other; they only verify the `SessionManager`.
+
 ---
 
 ## 📊 State Diagram
@@ -200,6 +206,7 @@ AppState ← cycle continues
 | **Phase 3** | Firebase + Chirp 3 + Gemini (separate STT + cleanup)        |
 | **Phase 4** | Unified AppState refactor (simplified state management)     |
 | **Phase 5** | Unified CloudTranscriptionService (merged STT + AI Polish)  |
+| **Phase 6** | Documentation Overhaul & Hackathon Polish (Ready for Submission) |
 
 ---
 

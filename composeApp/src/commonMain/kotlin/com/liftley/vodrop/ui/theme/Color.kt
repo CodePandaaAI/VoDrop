@@ -1,6 +1,12 @@
 package com.liftley.vodrop.ui.theme
 import androidx.compose.ui.graphics.Color
 
+/**
+ * **Material 3 Color Palette**
+ * 
+ * Generated tokens for the VoDrop Design System.
+ */
+
 val primaryLight = Color(0xFF3D5F90)
 val onPrimaryLight = Color(0xFFFFFFFF)
 val primaryContainerLight = Color(0xFFD5E3FF)

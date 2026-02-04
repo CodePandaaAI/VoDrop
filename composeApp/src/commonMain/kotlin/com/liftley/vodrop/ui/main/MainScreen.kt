@@ -45,6 +45,23 @@ import org.jetbrains.compose.resources.stringResource
 import vodrop.composeapp.generated.resources.Res
 import vodrop.composeapp.generated.resources.status_text
 
+/**
+ * **Main Screen Composition**
+ * 
+ * The root composable for the main feature.
+ * 
+ * **Structure:**
+ * - [ModalNavigationDrawer]: For settings/profile (Hamburger menu).
+ * - [Scaffold]: TopBar + Content Area.
+ * - [LazyColumn]: Scrollable list containing:
+ *   1. [RecordingCard] (Always visible at top).
+ *   2. [HistoryCard] list (Recent drops).
+ * - Dialogs: Delete confirmation, Text Editing.
+ * 
+ * **State:**
+ * Observes [MainViewModel] to render the UI reactively.
+ */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: MainViewModel) {

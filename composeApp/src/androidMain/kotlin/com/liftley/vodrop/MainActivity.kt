@@ -12,6 +12,14 @@ import androidx.core.content.ContextCompat
 import com.liftley.vodrop.service.ServiceController
 import org.koin.android.ext.android.inject
 
+/**
+ * **Android Entry Point**
+ * 
+ * Handles:
+ * 1. Runtime Permissions (Microphone, Notifications).
+ * 2. Starting the background KMP Application.
+ * 3. Lifecycle-aware Service startup.
+ */
 class MainActivity : ComponentActivity() {
 
     private val serviceController: ServiceController by inject()
@@ -27,15 +35,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Critical: Ensure permissions before starting any recording logic
         requestPermissionsIfNeeded()
-        // Start service immediately so it's ready for recording
+        
+        // Start service immediately so it's ready for recording.
+        // This ensures the Notification Channel is created and ready.
         serviceController.startForeground()
+        
         setContent { App() }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Stop service when app is closed (not just backgrounded)
+        // Stop service ONLY when the app is fully closed (swiped away/finished).
+        // If simply backgrounded, the service stays running to show the "Ready" notification.
         if (isFinishing) {
             serviceController.stopForeground()
         }
@@ -49,6 +63,7 @@ class MainActivity : ComponentActivity() {
             permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
         }
 
+        // Android 13+ Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {

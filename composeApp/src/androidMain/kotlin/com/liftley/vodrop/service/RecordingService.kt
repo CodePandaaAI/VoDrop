@@ -23,12 +23,18 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 /**
- * Foreground service - PURE OBSERVER of RecordingSessionManager state.
+ * **Foreground Service (Reactive Observer)**
  * 
- * This service:
- * - Shows notifications based on AppState
- * - DOES NOT command SessionManager (that's BroadcastReceiver's job)
- * - Only purpose is to keep the app alive in background
+ * This Service ensures the app remains alive during background recording.
+ * 
+ * **Architectural Role:**
+ * - **Pure Observer:** It does NOT hold state or business logic. It simply observes [RecordingSessionManager.state].
+ * - **Unidirectional:** User actions on notifications are sent via Broadcasts to [RecordingCommandReceiver], 
+ *   which then calls the SessionManager. The Service never calls SessionManager directly to change state.
+ * 
+ * **Notification Channels:**
+ * 1. [CHANNEL_ID] (Low mportance): For "Recording..." and "Processing..." updates. Silent.
+ * 2. [RESULT_CHANNEL_ID] (High Importance): For "Transcription Ready". Plays sound/vibrates.
  */
 class RecordingService : Service() {
 
@@ -53,12 +59,16 @@ class RecordingService : Service() {
         observeState()
     }
 
+    /**
+     * Called when startForeground() is triggered from logic.
+     * We immediately show a notification to satisfy Android strict background policies.
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand")
         
         recordingStartTime = System.currentTimeMillis()
         
-        // Always start foreground with current state notification
+        // Android 14+ requires type declaration in manifest, handled below in startForeground
         startForegroundWithNotification(createNotificationFor(sessionManager.state.value))
         
         return START_NOT_STICKY
@@ -70,8 +80,8 @@ class RecordingService : Service() {
     }
 
     /**
-     * Observe state and update notification accordingly.
-     * This is the ONLY job of this service.
+     * Connects to the Single Source of Truth.
+     * Updates the persistent notification whenever AppState changes.
      */
     private fun observeState() {
         scope.launch {
@@ -117,7 +127,7 @@ class RecordingService : Service() {
     }
 
     private fun createNotificationChannel() {
-        // Silent channel for recording/processing
+        // Silent channel for recording/processing overrides
         val silentChannel = NotificationChannel(
             CHANNEL_ID,
             "VoDrop Recording",
@@ -128,7 +138,7 @@ class RecordingService : Service() {
             setSound(null, null)
         }
         
-        // Sound channel for results
+        // Audibly notify when work is done
         val resultChannel = NotificationChannel(
             RESULT_CHANNEL_ID,
             "VoDrop Results",
@@ -161,7 +171,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Pop up with sound
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("Recording...")
             .setContentText("Tap Stop to finish, Cancel to discard")
@@ -183,7 +193,7 @@ class RecordingService : Service() {
             .setContentText(message)
             .setProgress(0, 0, true)
             .setOngoing(true)
-            .setSilent(true)  // No sound for processing
+            .setSilent(true)  // No sound for processing updates
             .setContentIntent(createOpenAppPendingIntent())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -192,7 +202,7 @@ class RecordingService : Service() {
     private fun createResultNotification(text: String): Notification {
         val displayMessage = if (text.length > 50) text.take(50) + "..." else text
 
-        // Copy action via BroadcastReceiver
+        // Copy action
         val copyIntent = PendingIntent.getBroadcast(
             this, 3,
             Intent(this, RecordingCommandReceiver::class.java).apply {
@@ -202,7 +212,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Start New Recording action via BroadcastReceiver
+        // Start New Recording action
         val startIntent = PendingIntent.getBroadcast(
             this, 5,
             Intent(this, RecordingCommandReceiver::class.java).apply {
@@ -211,7 +221,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Use result channel for sound
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_save)
             .setContentTitle("Transcription Ready")
             .setContentText(displayMessage)
@@ -226,7 +236,6 @@ class RecordingService : Service() {
     }
 
     private fun createIdleNotification(): Notification {
-        // Start Recording action via BroadcastReceiver
         val startIntent = PendingIntent.getBroadcast(
             this, 4,
             Intent(this, RecordingCommandReceiver::class.java).apply { 
@@ -235,7 +244,7 @@ class RecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)  // Pop up with sound
+        return NotificationCompat.Builder(this, RESULT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("VoDrop Ready")
             .setContentText("Tap to start recording from anywhere")
@@ -247,7 +256,7 @@ class RecordingService : Service() {
     }
 
     private fun createErrorNotification(message: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)  // Silent channel
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("Error")
             .setContentText(message)

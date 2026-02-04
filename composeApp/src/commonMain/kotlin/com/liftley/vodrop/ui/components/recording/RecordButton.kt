@@ -33,8 +33,12 @@ import androidx.compose.ui.unit.dp
 import com.liftley.vodrop.domain.model.AppState
 
 /**
- * Record button with different states based on AppState.
- * Shows waveform animation during recording.
+ * **Feature-Rich Record Button**
+ * 
+ * The central UI element. Supports 3 visual states:
+ * 1. **Idle:** Static Mic icon.
+ * 2. **Recording:** Animated Waveform visualization (simulated).
+ * 3. **Processing:** Spinner.
  */
 @Composable
 fun RecordButton(
@@ -91,7 +95,10 @@ fun RecordButton(
 }
 
 /**
- * Simple waveform visualization with 5 bars.
+ * **Waveform Visualizer**
+ * 
+ * Draws 5 animated bars to simulate audio input.
+ * Uses `infiniteTransition` for smooth looping.
  */
 @Composable
 private fun SimpleWaveform(

@@ -5,7 +5,8 @@ import com.liftley.vodrop.data.cloud.TranscriptionResult
 import com.liftley.vodrop.ui.main.TranscriptionMode
 
 /**
- * Result of transcription with both original and polished text.
+ * **Transcription Result Container**
+ * Holds one or both versions of the transcribed text.
  */
 data class TranscriptionTexts(
     val original: String,
@@ -13,16 +14,26 @@ data class TranscriptionTexts(
 )
 
 /**
- * Use case for transcribing audio with optional AI polish.
+ * **Transcribe Audio Use Case**
  * 
- * Single dependency: CloudTranscriptionService handles everything.
+ * Orchestrates the "Record -> Transcribe -> Polish" business logic.
+ * Decides *when* to apply AI polish based on user preferences and text content.
+ * 
+ * **Logic:**
+ * 1. Call Cloud Service to Transcribe Audio (Chirp 3).
+ * 2. If [mode] is [TranscriptionMode.WITH_AI_POLISH] AND text > 20 chars:
+ *    - Call Cloud Service to Polish Text (Gemini 3 Flash).
+ * 3. Return combined result.
  */
 class TranscribeAudioUseCase(
     private val cloudService: CloudTranscriptionService
 ) {
     /**
-     * Transcribe audio data with optional AI polish.
-     * @return Result with both original and polished text
+     * Executes the transcription pipeline.
+     * 
+     * @param audioData Raw PCM audio bytes.
+     * @param mode User's selected mode (Standard or AI Polish).
+     * @param onProgress Callback to update UI status messages (e.g. "Uploading...", "Polishing...").
      */
     suspend operator fun invoke(
         audioData: ByteArray,
@@ -36,7 +47,8 @@ class TranscribeAudioUseCase(
                 is TranscriptionResult.Success -> {
                     val originalText = result.text.trim()
 
-                    // Apply AI polish if requested and text is substantial
+                    // Optimization: Don't polish very short phrases ("Hello", "Testing") 
+                    // even if mode is active, to save time/cost.
                     val polishedText = if (mode == TranscriptionMode.WITH_AI_POLISH && originalText.length > 20) {
                         onProgress("✨ Polishing...")
                         cloudService.polish(originalText)
@@ -52,8 +64,9 @@ class TranscribeAudioUseCase(
     }
 
     /**
-     * Improve existing text with AI polish.
-     * Used for re-polishing history items.
+     * **Re-Polish Feature**
+     * 
+     * Allows the user to apply AI polish to an existing "Standard" transcription later.
      */
     suspend fun improveText(text: String): String? = cloudService.polish(text)
 }

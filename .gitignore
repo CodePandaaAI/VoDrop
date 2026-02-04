@@ -37,3 +37,4 @@ composeApp/google-services.json
 *.apk
 *.aab
 *.log
+.gemini/

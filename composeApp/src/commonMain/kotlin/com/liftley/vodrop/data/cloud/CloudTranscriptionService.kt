@@ -1,7 +1,7 @@
 package com.liftley.vodrop.data.cloud
 
 /**
- * Result of a transcription operation.
+ * **Transcription Result Wrapper**
  */
 sealed interface TranscriptionResult {
     data class Success(val text: String) : TranscriptionResult
@@ -9,31 +9,33 @@ sealed interface TranscriptionResult {
 }
 
 /**
- * Unified cloud transcription service.
+ * **Cloud Service Interface**
  * 
- * Handles both:
- * - Speech-to-Text (Chirp 3)
- * - AI Polish (Gemini 3 Flash)
+ * Defines the contract for Server-Side AI operations.
  * 
- * Single Firebase initialization, clean API.
+ * **Responsibilities:**
+ * 1. [transcribe]: Audio -> Text (Google Chirp 3).
+ * 2. [polish]: Text -> Better Text (Gemini 3 Flash).
+ * 
+ * Implementations (Android/Desktop) handle the networking/Firebase specifics.
  */
 interface CloudTranscriptionService {
     
     /**
-     * Transcribe audio to text.
-     * @param audioData Raw PCM audio (16kHz, mono, 16-bit)
+     * Uploads audio and waits for transcription.
+     * Handles upload -> cloud function call -> result parsing.
      */
     suspend fun transcribe(audioData: ByteArray): TranscriptionResult
     
     /**
-     * Polish/cleanup text using AI.
-     * Fixes grammar, removes filler words.
-     * @return Polished text or null if failed
+     * Sends text to LLM for cleanup.
+     * Should fail gracefully (return null) if network issues occur.
      */
     suspend fun polish(text: String): String?
 }
 
 /**
- * Platform-specific factory.
+ * Expect/Actual factory to provide platform-specific implementation.
+ * (e.g., Android uses Firebase SDK, Desktop uses REST API).
  */
 expect fun createCloudTranscriptionService(): CloudTranscriptionService

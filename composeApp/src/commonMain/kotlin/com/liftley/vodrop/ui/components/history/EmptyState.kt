@@ -21,6 +21,12 @@ import org.jetbrains.compose.resources.painterResource
 import vodrop.composeapp.generated.resources.Res
 import vodrop.composeapp.generated.resources.empty_state
 
+/**
+ * **Empty State View**
+ * 
+ * Shown when there are no transcription history items.
+ * Uses a vector resource and a helpful prompt.
+ */
 @Composable
 fun EmptyState() {
     Box(

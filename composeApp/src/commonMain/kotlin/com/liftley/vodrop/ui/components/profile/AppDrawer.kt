@@ -26,6 +26,12 @@ import androidx.compose.ui.text.font.FontWeight
 import com.liftley.vodrop.ui.components.reusable.ExpressiveIconButton
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * **Navigation Drawer Content**
+ * 
+ * Displays app information and potential settings.
+ * Currently serves as an "About" section for the Hackathon entry.
+ */
 @Composable
 fun AppDrawerContent(
     statusText: String,
@@ -57,7 +63,7 @@ fun AppDrawerContent(
 
             Spacer(Modifier.height(Dimens.small16))
 
-            // Status
+            // Status Card
             Card(
                 Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)

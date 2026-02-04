@@ -38,6 +38,16 @@ import com.liftley.vodrop.domain.model.Transcription
 import com.liftley.vodrop.ui.components.reusable.HistoryCardButton
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * **History Item Card**
+ * 
+ * Displays a single previous transcription.
+ * 
+ * **Features:**
+ * - **Dual View:** Toggles between 'Original' and 'Polished' text if available.
+ * - **Local State:** Uses `remember(transcription.id)` to track the view toggle locally per item.
+ * - **Actions:** Copy, Edit (context-aware), Delete, and AI Polish (if missing).
+ */
 @Composable
 fun HistoryCard(
     transcription: Transcription,
@@ -48,7 +58,7 @@ fun HistoryCard(
     onDelete: () -> Unit,
     onImproveWithAI: () -> Unit
 ) {
-    // Track which version is being viewed - key ensures reset when transcription changes
+    // Track which version is being viewed - key ensures reset when transcription changes (e.g. after polish completes)
     var showPolished by remember(transcription.id, transcription.hasPolished) { 
         mutableStateOf(transcription.hasPolished) 
     }
@@ -166,6 +176,7 @@ fun HistoryCard(
             }
 
             // AI Polish button (shows on polished tab OR if no polish exists yet)
+            // Allows re-polishing or initial polishing of old items
             if (showPolished || !transcription.hasPolished) {
                 Spacer(Modifier.height(8.dp))
                 Button(

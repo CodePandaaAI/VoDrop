@@ -30,8 +30,16 @@ import com.liftley.vodrop.domain.model.AppState
 import com.liftley.vodrop.ui.theme.Dimens
 
 /**
- * Recording card that displays based on AppState.
- * Single source of truth - no internal state translation.
+ * **Smart Recording Card**
+ * 
+ * The primary interaction surface. It morphs its UI based on the global [AppState].
+ * 
+ * **UI States:**
+ * - [Ready]: Show big "Record" button.
+ * - [Recording]: Show "Recording..." label + Cancel option.
+ * - [Processing]: Show spinner + "Transcribing..."/"Polishing...".
+ * - [Success]: Show result text + "Copy" button.
+ * - [Error]: Show error message card.
  */
 @Composable
 fun RecordingCard(

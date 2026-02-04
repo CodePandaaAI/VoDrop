@@ -22,11 +22,19 @@ import java.io.ByteArrayOutputStream
 private const val TAG = "AudioRecorder"
 
 /**
- * Android audio recorder using AudioRecord API.
- * Produces 16kHz, mono, 16-bit PCM audio.
- *
- * PURE RECORDER: No state exposure, no service knowledge.
- * Just records bytes and returns them.
+ * **Android Audio Recorder Implementation**
+ * 
+ * Uses the low-level [AudioRecord] API to capture raw PCM bytes.
+ * 
+ * **Constraint Compliance:**
+ * - Sample Rate: [AudioConfig.SAMPLE_RATE] (16kHz)
+ * - Channel: Mono
+ * - Format: 16-bit PCM
+ * 
+ * **Memory Strategy:**
+ * Captures to an in-memory [ByteArrayOutputStream]. 
+ * Note: 1 minute of audio = ~1.9MB. 
+ * This is safe for short voice notes (up to 5-10 mins) but not for hour-long meetings.
  */
 class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
@@ -35,7 +43,8 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
 
-    // ~30 seconds at 16kHz mono 16-bit = 16000 * 2 * 30 = 960,000 bytes
+    // Pre-allocating buffer for ~30 seconds to minimize resizing
+    // 16000 * 2 (bytes) * 30 = 960,000 bytes
     private var audioData = ByteArrayOutputStream(960_000)
 
     companion object {
@@ -46,6 +55,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
     override suspend fun startRecording() {
         Log.d(TAG, "startRecording() called")
 
+        // Idempotency check
         if (recordingJob?.isActive == true) {
             Log.d(TAG, "startRecording() called while already recording, ignoring.")
             return
@@ -70,6 +80,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
                 throw AudioRecorderException("Device doesn't support this audio configuration")
             }
 
+            // Double the buffer for safety
             val bufferSize = minBufferSize * 2
 
             audioRecord = AudioRecord(
@@ -90,7 +101,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
             Log.d(TAG, "Recording started at ${AudioConfig.SAMPLE_RATE}Hz")
 
-            // Launch recording coroutine
+            // Block-free reading loop
             recordingJob = CoroutineScope(Dispatchers.IO).launch {
                 val buffer = ByteArray(bufferSize)
 
@@ -99,6 +110,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
 
                     when {
                         bytesRead > 0 -> {
+                            // Accumulate data
                             audioData.write(buffer, 0, bytesRead)
                         }
 
@@ -142,6 +154,7 @@ class AndroidAudioRecorder : AudioRecorder, KoinComponent {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
+            
             val data = audioData.toByteArray()
             audioData.reset()
             data

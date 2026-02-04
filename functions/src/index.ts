@@ -7,27 +7,46 @@ admin.initializeApp();
 
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
-// Region & Recognizer Configuration
+/**
+ * Region configuration for Cloud Speech-to-Text.
+ * We strictly use 'us' (us-central1) for maximum stability and model availability.
+ */
 const REGION = "us";
 const RECOGNIZER_ID = "vodrop-chirp";
 
-// Speech Client for US Multi-Region
+/**
+ * Shared Speech Client instance for US Multi-Region.
+ * Initialized once to reduce cold start latency.
+ */
 const speechClient = new v2.SpeechClient({
   apiEndpoint: `${REGION}-speech.googleapis.com`,
 });
 
-// Audio Configuration (must match Android AudioConfig)
+// Audio Configuration (Matched to Android AudioConfig)
 const SAMPLE_RATE = 16000;
 const AUDIO_CHANNELS = 1;
-const MAX_SYNC_DURATION_SECONDS = 55; // Use sync recognize for audio under 55s (with 5s buffer)
 
 /**
- * Transcribe audio using Google Cloud Speech-to-Text V2 (Chirp 3).
- *
- * Optimizations:
- * - Uses synchronous `recognize` for audio <60s (much faster)
- * - Uses `batchRecognize` with inline response for longer audio (no GCS round-trip)
- * - Uses explicit audio config instead of auto-detection
+ * Threshold for choosing between Synchronous and Batch recognition.
+ * 
+ * - Audio < 55s: Processed synchronously. Faster user experience for short notes.
+ * - Audio > 55s: Processed via Batch API with Inline Response.
+ *   Note: The limit is technically 60s, but we use 55s to provide a safety buffer.
+ */
+const MAX_SYNC_DURATION_SECONDS = 55;
+
+/**
+ * Cloud Function: Transcribe Audio using Chirp 3 (USM) model.
+ * 
+ * Architecture:
+ * 1. Receives a GCS URI pointing to the uploaded WAV file.
+ * 2. Determines the optimal transcription method (Sync vs Batch) based on duration.
+ * 3. Calls Google Cloud Speech-to-Text V2 API.
+ * 4. Cleans up the uploaded file immediately to manage storage costs.
+ * 5. Returns the raw text to the client.
+ * 
+ * @param request.data.gcsUri - gs:// path to the audio file.
+ * @param request.data.durationSeconds - Duration hint from client to optimize routing.
  */
 export const transcribeChirp = onCall(
   {
@@ -44,7 +63,7 @@ export const transcribeChirp = onCall(
     const projectId = process.env.GCLOUD_PROJECT || "vodrop-app";
     const recognizer = `projects/${projectId}/locations/${REGION}/recognizers/${RECOGNIZER_ID}`;
 
-    // Shared config for both sync and batch
+    // Configuration for Chirp 3 model
     const recognitionConfig = {
       explicitDecodingConfig: {
         encoding: "LINEAR16" as const,
@@ -59,17 +78,19 @@ export const transcribeChirp = onCall(
       },
     };
 
-    console.log(`[transcribeChirp] URI: ${gcsUri}, Duration: ${durationSeconds ?? "unknown"}s`);
+    console.log(`[transcribeChirp] Processing URI: ${gcsUri}, Duration: ${durationSeconds ?? "unknown"}s`);
 
     try {
       let transcription: string;
 
-      // Choose sync or batch based on duration
+      // ─────────────────────────────────────────────────────────────────────────────
+      // STRATEGY SELECTION
+      // ─────────────────────────────────────────────────────────────────────────────
+
       if (durationSeconds !== undefined && durationSeconds <= MAX_SYNC_DURATION_SECONDS) {
-        // ═══════════════════════════════════════════════════════════
-        // FAST PATH: Synchronous recognize for short audio (<55s)
-        // ═══════════════════════════════════════════════════════════
-        console.log(`[transcribeChirp] Using SYNC recognize (${durationSeconds}s)`);
+        // STRATEGY A: Synchronous Recognize
+        // Best for short interactions. Connection is held open until result returns.
+        console.log(`[transcribeChirp] Strategy: SYNC (Duration <= ${MAX_SYNC_DURATION_SECONDS}s)`);
 
         const [response] = await speechClient.recognize({
           recognizer: recognizer,
@@ -83,23 +104,24 @@ export const transcribeChirp = onCall(
           .trim();
 
       } else {
-        // ═══════════════════════════════════════════════════════════
-        // BATCH PATH: For longer audio (>55s) with INLINE response
-        // ═══════════════════════════════════════════════════════════
-        console.log(`[transcribeChirp] Using BATCH recognize with inline response`);
+        // STRATEGY B: Batch Recognize (Inline)
+        // Best for longer audio (>1 min). 
+        // We use 'inlineResponseConfig' to get the result immediately in the response
+        // instead of writing it to a bucket file, saving a round-trip.
+        console.log(`[transcribeChirp] Strategy: BATCH (Duration > ${MAX_SYNC_DURATION_SECONDS}s)`);
 
         const [operation] = await speechClient.batchRecognize({
           recognizer: recognizer,
           config: recognitionConfig,
           files: [{ uri: gcsUri }],
           recognitionOutputConfig: {
-            inlineResponseConfig: {}, // ← Results in response, not GCS!
+            inlineResponseConfig: {}, // Critical: Returns results directly in the API response
           },
         });
 
         const [response] = await operation.promise();
 
-        // Extract transcription from inline result
+        // Parse Batch Result
         const fileResult = response.results?.[gcsUri];
 
         if (fileResult?.error) {
@@ -113,32 +135,38 @@ export const transcribeChirp = onCall(
           .trim();
       }
 
-      // Cleanup: Delete the uploaded audio file from Storage
+      // ─────────────────────────────────────────────────────────────────────────────
+      // CLEANUP
+      // ─────────────────────────────────────────────────────────────────────────────
+
       try {
         const matches = gcsUri.match(/gs:\/\/([^\/]+)\/(.+)/);
         if (matches) {
           const bucketName = matches[1];
           const filePath = matches[2];
           await admin.storage().bucket(bucketName).file(filePath).delete();
-          console.log(`[transcribeChirp] Cleaned up: ${filePath}`);
+          console.log(`[transcribeChirp] Cleanup successful: ${filePath}`);
         }
       } catch (cleanupError) {
-        console.warn("[transcribeChirp] Cleanup failed (non-critical):", cleanupError);
+        // Non-blocking error. We log it but don't fail the client request.
+        console.warn("[transcribeChirp] Cleanup warning:", cleanupError);
       }
 
-      console.log(`[transcribeChirp] Success: "${transcription.substring(0, 50)}..."`);
+      const snippet = transcription.substring(0, 50);
+      console.log(`[transcribeChirp] Success. Result snippet: "${snippet}..."`);
+
       return { text: transcription || "(No speech detected)" };
 
     } catch (error: any) {
-      console.error("[transcribeChirp] Failed:", error);
-      throw new HttpsError("internal", `Transcription failed: ${error.message}`);
+      console.error("[transcribeChirp] Fatal Error:", error);
+      throw new HttpsError("internal", `Transcription pipeline failed: ${error.message}`);
     }
   }
 );
 
-// ════════════════════════════════════════════════════════════════════════════
-// GEMINI AI POLISH FUNCTION
-// ════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────────
+// GEMINI INTELLIGENCE LAYER
+// ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_CLEANUP_RULES = `
 You are an expert transcription editor. Your goal is to transform raw speech-to-text output into a clean, natural, and readable format while maintaining the speaker's original voice, intent, and meaning.
@@ -171,28 +199,32 @@ Actual User Input To Improve:
 `;
 
 /**
- * Polish/cleanup transcription using Gemini 3 Flash.
- * Removes filler words, fixes grammar, improves readability.
+ * Cloud Function: AI Polish using Gemini 3 Flash.
+ * 
+ * Transforms raw transcription into polished, structured notes.
+ * Uses the low-cost, low-latency Gemini 3 Flash model via the Generative Language API.
+ * 
+ * @param request.data.text - The raw transcribed text to polish.
  */
 export const cleanupText = onCall(
   {
     secrets: [geminiApiKey],
-    timeoutSeconds: 120, // Reduced from 300 - cleanup is fast
-    memory: "256MiB",    // Reduced from 512 - just an API call
+    timeoutSeconds: 120, // Short timeout as Gemini Flash is extremely fast
+    memory: "256MiB",    // Minimal memory needed for simple API proxying
     maxInstances: 10,
   },
   async (request) => {
     const text = request.data.text as string;
     if (!text) throw new HttpsError("invalid-argument", "Missing text");
 
-    // Skip cleanup for very short text
+    // Optimization: Don't waste AI tokens on empty/trivial input
     if (text.length < 10) {
       return { text: text };
     }
 
     const fullPrompt = BASE_CLEANUP_RULES + "\n\nTranscription:\n\"" + text + "\"";
 
-    console.log(`[cleanupText] Processing ${text.length} chars`);
+    console.log(`[cleanupText] Sending ${text.length} chars to Gemini 3 Flash`);
 
     try {
       const response = await fetch(
@@ -206,7 +238,7 @@ export const cleanupText = onCall(
           body: JSON.stringify({
             contents: [{ parts: [{ text: fullPrompt }] }],
             generationConfig: {
-              temperature: 0.2,
+              temperature: 0.2, // Low temperature for deterministic, faithful editing
               maxOutputTokens: 4096,
               topP: 0.8,
               topK: 10,
@@ -217,8 +249,8 @@ export const cleanupText = onCall(
       );
 
       if (!response.ok) {
-        console.error(`[cleanupText] Gemini API error: ${response.status}`);
-        throw new HttpsError("internal", "Cleanup failed");
+        console.error(`[cleanupText] Gemini API Error: ${response.status} ${response.statusText}`);
+        throw new HttpsError("internal", "Gemini API request failed");
       }
 
       interface GeminiResponse {
@@ -228,12 +260,12 @@ export const cleanupText = onCall(
       const result = (await response.json()) as GeminiResponse;
       const cleanedText = result.candidates?.[0]?.content?.parts?.[0]?.text || text;
 
-      console.log(`[cleanupText] Success: "${cleanedText.substring(0, 50)}..."`);
+      console.log(`[cleanupText] Success. Output length: ${cleanedText.length}`);
       return { text: cleanedText };
 
     } catch (error: any) {
-      console.error("[cleanupText] Failed:", error);
-      throw new HttpsError("internal", `Cleanup failed: ${error.message}`);
+      console.error("[cleanupText] Pipeline Failed:", error);
+      throw new HttpsError("internal", `Cleanup pipeline failed: ${error.message}`);
     }
   }
 );

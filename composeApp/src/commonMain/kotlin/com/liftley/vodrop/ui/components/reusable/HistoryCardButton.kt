@@ -7,6 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 
+/**
+ * **Shared History Action Button**
+ * 
+ * A styled [Button] wrapper providing a consistent look for
+ * Copy, Edit, and Delete actions in the [HistoryCard].
+ */
 @Composable
 fun HistoryCardButton(
     shapes: Shape,

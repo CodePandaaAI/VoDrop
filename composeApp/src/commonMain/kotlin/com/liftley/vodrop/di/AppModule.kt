@@ -14,29 +14,35 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 /**
- * Koin module for shared/common dependencies.
+ * **Dependency Injection Graph (Koin)**
  * 
- * Architecture: Unified AppState with unidirectional data flow.
- * - SessionManager is SSOT for recording state
- * - ViewModel directly exposes SessionManager.state
- * - All components observe AppState (no translation)
+ * Defines the application's wiring.
+ * 
+ * **Strict Singleton Policy:**
+ * - [RecordingSessionManager] MUST be a `single`. It holds the global state.
+ * - [AudioRecorder] and [CloudTranscriptionService] are stateless utils, so `single` is efficient.
+ * - [MainViewModel] is a `viewModel` (scoped to screen lifecycle).
+ * 
+ * **Data Flow:**
+ * UI -> ViewModel -> SessionManager -> UseCases -> Repositories/Services
  */
 val appModule = module {
 
-    // ═══════════ DATABASE ═══════════
+    // ═══════════ DATA LAYER ═══════════
     single { get<DatabaseDriverFactory>().createDriver() }
     single { VoDropDatabase(get()) }
     single<TranscriptionRepository> { TranscriptionRepositoryImpl(get()) }
 
-    // ═══════════ CLOUD SERVICES ═══════════
+    // ═══════════ INFRASTRUCTURE ═══════════
     single { createAudioRecorder() }
-    single { createCloudTranscriptionService() }  // Unified: transcription + polish
+    single { createCloudTranscriptionService() }  // Unified backend interface
     single<ServiceController> { createServiceController() }
 
-    // ═══════════ USE CASES ═══════════
-    single { TranscribeAudioUseCase(get()) }  // Single dependency now!
+    // ═══════════ DOMAIN USE CASES ═══════════
+    single { TranscribeAudioUseCase(get()) }
 
-    // ═══════════ MANAGERS (SSOT) ═══════════
+    // ═══════════ STATE MANAGEMENT (SSOT) ═══════════
+    // Critical: This instance lives as long as the app process.
     single {
         RecordingSessionManager(
             audioRecorder = get(),
@@ -46,7 +52,7 @@ val appModule = module {
         )
     }
 
-    // ═══════════ VIEWMODEL ═══════════
+    // ═══════════ UI LAYER ═══════════
     viewModel {
         MainViewModel(
             sessionManager = get(),

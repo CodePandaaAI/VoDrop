@@ -11,6 +11,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.liftley.vodrop.ui.theme.Dimens
 
+/**
+ * **Reusable Icon Button**
+ * 
+ * Standardized icon button with consistent size and container color.
+ * Used for top bar actions and drawer controls.
+ */
 @Composable
 fun ExpressiveIconButton(
     onClick: () -> Unit,
