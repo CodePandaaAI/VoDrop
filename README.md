@@ -80,8 +80,8 @@ VoDrop uses a **unified state architecture** with unidirectional data flow:
                               │
 ┌─────────────────────────────▼───────────────────────────────┐
 │                      Data Layer                              │
-│  AudioRecorder (pure bytes) │ SpeechToTextEngine (Chirp 3) │
-│  TextCleanupService (Gemini)│ TranscriptionRepository (SQL) │
+│  AudioRecorder (pure bytes) │ CloudTranscriptionService     │
+│  (STT + AI Polish unified)  │ TranscriptionRepository (SQL) │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -114,7 +114,6 @@ This single sealed interface replaces what were previously 3 separate state clas
 | **AI Cleanup**     | Gemini 3 Flash        | Text polish & grammar fix         |
 | **Cloud**          | Firebase Functions    | Secure API key management         |
 | **Background**     | Foreground Service    | Recording while app in background |
-| **Networking**     | Ktor                  | HTTP client                       |
 
 ---
 
@@ -125,9 +124,8 @@ VoDrop/
 ├── composeApp/src/
 │   ├── commonMain/kotlin/com/liftley/vodrop/
 │   │   ├── data/
-│   │   │   ├── audio/AudioConfig.kt         # Audio constants
-│   │   │   ├── stt/SpeechToTextEngine.kt    # STT interface
-│   │   │   └── llm/TextCleanupService.kt    # AI cleanup interface
+│   │   │   ├── audio/AudioConfig.kt              # Audio constants + AudioRecorder interface
+│   │   │   └── cloud/CloudTranscriptionService.kt # ★ Unified STT + AI Polish interface
 │   │   ├── domain/
 │   │   │   ├── model/
 │   │   │   │   ├── AppState.kt              # ★ Unified state
@@ -150,8 +148,7 @@ VoDrop/
 │   ├── androidMain/kotlin/com/liftley/vodrop/
 │   │   ├── data/
 │   │   │   ├── audio/AudioRecorder.android.kt
-│   │   │   ├── stt/SpeechToTextEngine.android.kt  # Cloud STT (Chirp 3)
-│   │   │   └── llm/FirebaseTextCleanupService.kt  # AI cleanup (Gemini)
+│   │   │   └── cloud/CloudTranscriptionService.android.kt  # ★ Chirp 3 + Gemini
 │   │   ├── service/RecordingService.kt      # Foreground service
 │   │   └── service/RecordingCommandReceiver.kt
 │   │
