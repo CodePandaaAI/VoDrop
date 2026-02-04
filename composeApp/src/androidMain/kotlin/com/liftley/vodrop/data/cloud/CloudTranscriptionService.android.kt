@@ -67,7 +67,7 @@ class AndroidCloudTranscriptionService : CloudTranscriptionService, KoinComponen
                 
                 val result = functions
                     .getHttpsCallable("transcribeChirp")
-                    .apply { setTimeout(540, TimeUnit.SECONDS) }
+                    .apply { setTimeout(300, TimeUnit.SECONDS) }
                     .call(mapOf("gcsUri" to gcsUri))
                     .await()
 
@@ -99,7 +99,7 @@ class AndroidCloudTranscriptionService : CloudTranscriptionService, KoinComponen
     // ════════════════════════════════════════════════════════════════════
 
     override suspend fun polish(text: String): String? {
-        if (text.isBlank() || text.length < 10) return text
+        if (text.isBlank() || text.length <= 20) return text
 
         return withContext(Dispatchers.IO) {
             try {
