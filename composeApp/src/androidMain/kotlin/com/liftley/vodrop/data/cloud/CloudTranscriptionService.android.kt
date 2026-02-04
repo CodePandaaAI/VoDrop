@@ -50,37 +50,42 @@ class AndroidCloudTranscriptionService : CloudTranscriptionService, KoinComponen
             var tempFile: File? = null
             try {
                 ensureAuth()
-                // 1. Write WAV to temp file (memory-safe)
+
+                // 1. Calculate duration for sync/batch path selection on server
+                val durationSeconds = AudioConfig.calculateDurationSeconds(audioData)
+                Log.d(TAG, "Audio duration: ${durationSeconds}s")
+
+                // 2. Write WAV to temp file (memory-safe)
                 tempFile = File.createTempFile("audio_", ".wav", context.cacheDir)
                 writeWavToFile(audioData, tempFile)
 
-                // 2. Upload to Firebase Storage
+                // 3. Upload to Firebase Storage
                 val filename = "${UUID.randomUUID()}.wav"
                 val storageRef = storage.reference.child("uploads/$filename")
-                
+
                 Log.d(TAG, "Uploading ${tempFile.length()} bytes...")
                 storageRef.putFile(Uri.fromFile(tempFile)).await()
 
-                // 3. Call transcription function
+                // 4. Call transcription function with duration hint
                 val gcsUri = "gs://${storageRef.bucket}/uploads/$filename"
-                Log.d(TAG, "Transcribing...")
-                
+                Log.d(TAG, "Transcribing (${if (durationSeconds <= 55) "sync" else "batch"} mode)...")
+
                 val result = functions
                     .getHttpsCallable("transcribeChirp")
                     .apply { setTimeout(300, TimeUnit.SECONDS) }
-                    .call(mapOf("gcsUri" to gcsUri))
+                    .call(mapOf(
+                        "gcsUri" to gcsUri,
+                        "durationSeconds" to durationSeconds  // Server uses this for sync/batch decision
+                    ))
                     .await()
 
-                // 4. Cleanup remote file (async, non-blocking)
-                storageRef.delete().addOnFailureListener { 
-                    Log.w(TAG, "Remote cleanup failed", it) 
-                }
+                // Note: Server handles cleanup of uploaded file
 
                 // 5. Parse result
                 @Suppress("UNCHECKED_CAST")
                 val response = result.getData() as? Map<String, Any>
                 val text = response?.get("text") as? String ?: ""
-                
+
                 Log.d(TAG, "Transcription done: ${text.take(50)}...")
                 TranscriptionResult.Success(text)
 
@@ -88,7 +93,7 @@ class AndroidCloudTranscriptionService : CloudTranscriptionService, KoinComponen
                 Log.e(TAG, "Transcription failed", e)
                 TranscriptionResult.Error(e.message ?: "Transcription failed")
             } finally {
-                // Always delete temp file
+                // Always delete local temp file
                 tempFile?.delete()
             }
         }
