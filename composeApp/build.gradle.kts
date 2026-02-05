@@ -56,6 +56,8 @@ kotlin {
             implementation(libs.firebase.auth)
             implementation(libs.firebase.functions)
             implementation(libs.firebase.storage)
+            implementation(libs.firebase.appcheck.playintegrity)
+            implementation(libs.firebase.appcheck.debug)
         }
 
         commonMain.dependencies {
@@ -97,6 +99,10 @@ kotlin {
 }
 
 android {
+    buildFeatures {
+        buildConfig = true
+    }
+
     namespace = "com.liftley.vodrop"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
@@ -108,7 +114,6 @@ android {
         versionName = "1.0"
     }
 
-    // ✅ ADD THIS: Signing Configurations
     signingConfigs {
         // Debug config (uses default debug.keystore)
         getByName("debug") {
