@@ -187,5 +187,5 @@ classDiagram
 ---
 
 <div align="center">
-Built with ❤️ for the Gemini Hackathon
+Built with ❤️ for the <a href="https://gemini3.devpost.com/">Google Gemini 3 Hackathon</a> on Devpost
 </div>
