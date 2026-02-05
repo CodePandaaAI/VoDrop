@@ -4,11 +4,10 @@
 ### Messaging. Journaling. Prompting. Just drop your voice.
 
 [![Platform](https://img.shields.io/badge/Platform-Android_|_Desktop-blue?style=for-the-badge&logo=android)](https://kotlinlang.org/docs/multiplatform.html)
-[![AI Power](https://img.shields.io/badge/AI-Gemini_1.5_Flash-purple?style=for-the-badge&logo=google-gemini)](https://deepmind.google/technologies/gemini/)
+[![AI Power](https://img.shields.io/badge/AI-Gemini_3_Flash-purple?style=for-the-badge&logo=google-gemini)](https://deepmind.google/technologies/gemini/)
 [![Speech](https://img.shields.io/badge/STT-Chirp_3-green?style=for-the-badge&logo=google-cloud)](https://cloud.google.com/speech-to-text)
-
-> **"Weight on every second."**  
-> No Complex Setup. No Learning or figuring out. Just tap, speak, and get perfect text.
+ 
+> Just tap, speak, and get perfect text.
 
 [🎥 **Watch the Demo Video**](LINK_TO_YOUTUBE_VIDEO_HERE)
 
@@ -19,14 +18,19 @@
 ## 🎯 The Purpose
 
 Life happens on the go. You have a brilliant idea or a complex thought, but:
-*   **Typing is a nightmare** when you're walking or holding a coffee.
-*   **Voice notes are annoying** for the person receiving them.
-*   **Standard transcription** gives you a messy wall of text full of "ums" and "uhs".
+* **Typing is slow** when you're busy or moving  
+* **Voice notes are inconvenient** for the person receiving them  
+* **Basic transcription** gives messy text full of filler words
+
+You already know what you want to say.  
+You just need it **clean, structured, and ready to use**.
 
 ## 💡 The Solution: VoDrop
 
-VoDrop is simple. **No fluff. Instant results.**
-It takes your chaotic stream of consciousness and structures it perfectly.
+VoDrop is built for speed and clarity.
+
+Speak naturally.  
+VoDrop formats your speech into clean, readable text — instantly.
 
 ### Core Use Cases
 
@@ -45,11 +49,26 @@ Capture your day without the friction of typing. Turn a 2-minute stream of consc
 ## ❤️ Philosophy: Keep It Real
 **"Keep your voice original."**
 
-Most AI tools rewrite your text until you sound like a corporate robot. VoDrop does the opposite.
-*   We fix the grammar.
-*   We add the punctuation.
-*   **But we keep your words.**
-We ensure that when people read your message, they recognize **your** voice. It's just you, but polished.
+Most AI tools rewrite your text until you sound like a robot.  
+VoDrop does the opposite.
+
+VoDrop focuses on improving clarity, not changing personality.
+
+It can:
+* Fix grammar and sentence flow  
+* Remove filler words like "um", "uh", or repeated starts  
+* Break long thoughts into readable sentences  
+* Correct obvious transcription mistakes using context  
+* Organize text into clean paragraphs or lists when needed  
+
+But it **does not rewrite your message into something different**.
+
+The goal is simple:  
+When someone reads your message, it should still sound like you said it —  
+just clearer, cleaner, and easier to read.
+
+VoDrop improves how your message is written.  
+It does not change what you meant to say.
 
 ---
 
@@ -59,7 +78,7 @@ We ensure that when people read your message, they recognize **your** voice. It'
 |:--------------------------|:------------------------------------------------------------------------------------|
 | **Microphone Management** | Android Foreground Service for bulletproof background recording.                    |
 | **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                          |
-| **AI Polish**             | **Gemini 1.5 Flash** rewrites unstructured thought streams into crisp paragraphs.   |
+| **AI Polish**             | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs.   |
 | **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.             |
 | **Material 3 Design**     | sleek, modern UI with dark mode support.                                            |
 
@@ -77,14 +96,14 @@ graph LR
     C -->|Long Audio| D[Chirp 3 Batch]
     C -->|Short Audio| E[Chirp 3 Sync]
     D & E --> F[Raw Text]
-    F -->|Auth Token| G[Gemini 1.5 Flash]
+    F -->|Auth Token| G[Gemini 3 Flash]
     G --> H[Polished Text]
     H --> I[Android App]
 ```
 
-### 2. Why Gemini 1.5 Flash?
-We chose **Gemini 1.5 Flash** for the "AI Polish" feature because:
-*   **Speed**: It returns rewritten text in milliseconds, feeling instant to the user.
+### 2. Why Gemini 3 Flash?
+We chose **Gemini 3 Flash** for the "AI Polish" feature because:
+*   **Speed**: It returns rewritten text in very fast, feeling instant to the user.
 *   **Cost Efficiency**: It is extremely efficient for high-volume text processing, making the business model viable.
 *   **Intelligent Instruction Following**: It perfectly understands the nuance of "fixing grammar without changing the tone," a task where smaller models often fail.
 
