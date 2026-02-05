@@ -179,7 +179,7 @@ classDiagram
 
 ## 🔮 Roadmap
 
-*   [x] **Hackathon MVP**: Recording, Chirp 3, Gemini 1.5 Flash Polish.
+*   [x] **Hackathon MVP**: Recording, Chirp 3, Gemini 3 Flash Polish.
 *   [ ] **Style Selection**: Choose between "Formal", "Casual", or "Bullet Points" (Powered by dynamic Gemini prompts).
 *   [ ] **Desktop Support**: Fully enable the desktop target (currently logic-only).
 *   [ ] **iOS Support**: Expand the KMP codebase to target iOS users.
