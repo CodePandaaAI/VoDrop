@@ -102,15 +102,15 @@ Cloud STT (Chirp 3) provides:
 
 ## 🔧 Key Components
 
-| Component                   | Responsibility                                            |
-|-----------------------------|-----------------------------------------------------------|
-| `RecordingSessionManager`   | **SSOT** - Owns AppState, orchestrates recording flow     |
-| `AudioRecorder`             | **Pure byte recorder** - No state, just records PCM bytes |
+| Component                   | Responsibility                                                   |
+|-----------------------------|------------------------------------------------------------------|
+| `RecordingSessionManager`   | **SSOT** - Owns AppState, orchestrates recording flow            |
+| `AudioRecorder`             | **Pure byte recorder** - No state, just records PCM bytes        |
 | `CloudTranscriptionService` | **Unified cloud** - Transcription (Chirp 3) + AI Polish (Gemini) |
-| `RecordingService`          | **Pure observer** - Shows notification based on AppState  |
-| `ServiceController`         | **Platform abstraction** - Start/stop foreground service  |
-| `TranscribeAudioUseCase`    | **Orchestrator** - Uses CloudTranscriptionService         |
-| `MainViewModel`             | **Thin UI layer** - Exposes AppState, handles UI events   |
+| `RecordingService`          | **Pure observer** - Shows notification based on AppState         |
+| `ServiceController`         | **Platform abstraction** - Start/stop foreground service         |
+| `TranscribeAudioUseCase`    | **Orchestrator** - Uses CloudTranscriptionService                |
+| `MainViewModel`             | **Thin UI layer** - Exposes AppState, handles UI events          |
 
 ---
 
@@ -199,13 +199,13 @@ Both the **UI** (Jetpack Compose) and the **Foreground Service** are pure consum
 
 ## 🚀 Evolution Summary
 
-| Phase       | What Changed                                                |
-|-------------|-------------------------------------------------------------|
-| **Phase 1** | Started with local Whisper.cpp (abandoned - hung on device) |
-| **Phase 2** | Moved to Groq Whisper API (worked but insecure keys)        |
-| **Phase 3** | Firebase + Chirp 3 + Gemini (separate STT + cleanup)        |
-| **Phase 4** | Unified AppState refactor (simplified state management)     |
-| **Phase 5** | Unified CloudTranscriptionService (merged STT + AI Polish)  |
+| Phase       | What Changed                                                     |
+|-------------|------------------------------------------------------------------|
+| **Phase 1** | Started with local Whisper.cpp (abandoned - hung on device)      |
+| **Phase 2** | Moved to Groq Whisper API (worked but insecure keys)             |
+| **Phase 3** | Firebase + Chirp 3 + Gemini (separate STT + cleanup)             |
+| **Phase 4** | Unified AppState refactor (simplified state management)          |
+| **Phase 5** | Unified CloudTranscriptionService (merged STT + AI Polish)       |
 | **Phase 6** | Documentation Overhaul & Hackathon Polish (Ready for Submission) |
 
 ---

@@ -4,11 +4,11 @@
 ### Messaging. Journaling. Prompting. Just drop your voice.
 
 [![Platform](https://img.shields.io/badge/Platform-Android_|_Desktop-blue?style=for-the-badge&logo=android)](https://kotlinlang.org/docs/multiplatform.html)
-[![AI Power](https://img.shields.io/badge/AI-Gemini_3_Flash-purple?style=for-the-badge&logo=google-gemini)](https://deepmind.google/technologies/gemini/)
+[![AI Power](https://img.shields.io/badge/AI-Gemini_1.5_Flash-purple?style=for-the-badge&logo=google-gemini)](https://deepmind.google/technologies/gemini/)
 [![Speech](https://img.shields.io/badge/STT-Chirp_3-green?style=for-the-badge&logo=google-cloud)](https://cloud.google.com/speech-to-text)
 
 > **"Weight on every second."**  
-> No login. No settings maze. Just tap, speak, and get perfect text.
+> No Complex Setup. No Learning or figuring out. Just tap, speak, and get perfect text.
 
 [🎥 **Watch the Demo Video**](LINK_TO_YOUTUBE_VIDEO_HERE)
 
@@ -55,13 +55,13 @@ We ensure that when people read your message, they recognize **your** voice. It'
 
 ## ✨ Features
 
-| Feature | Tech Stack |
-| :--- | :--- |
-| **Microphone Management** | Android Foreground Service for bulletproof background recording. |
-| **Smart Transcription** | **Chirp 3 (USM)** automatically handles accents and noise. |
-| **AI Polish** | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs. |
-| **Unified Architecture** | Single Source of Truth (SSOT) architecture for robust state management. |
-| **Material 3 Design** | sleek, modern UI with dark mode support. |
+| Feature                   | Tech Stack                                                                          |
+|:--------------------------|:------------------------------------------------------------------------------------|
+| **Microphone Management** | Android Foreground Service for bulletproof background recording.                    |
+| **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                          |
+| **AI Polish**             | **Gemini 1.5 Flash** rewrites unstructured thought streams into crisp paragraphs.   |
+| **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.             |
+| **Material 3 Design**     | sleek, modern UI with dark mode support.                                            |
 
 ---
 
@@ -77,22 +77,22 @@ graph LR
     C -->|Long Audio| D[Chirp 3 Batch]
     C -->|Short Audio| E[Chirp 3 Sync]
     D & E --> F[Raw Text]
-    F -->|Auth Token| G[Gemini 3 Flash]
+    F -->|Auth Token| G[Gemini 1.5 Flash]
     G --> H[Polished Text]
     H --> I[Android App]
 ```
 
-### 2. Why Gemini 3 Flash?
-We chose **Gemini 3 Flash** for the "AI Polish" feature because:
+### 2. Why Gemini 1.5 Flash?
+We chose **Gemini 1.5 Flash** for the "AI Polish" feature because:
 *   **Speed**: It returns rewritten text in milliseconds, feeling instant to the user.
-*   **Cost**: extremely efficient for high-volume text processing.
-*   **Accuracy**: Perfect for understanding context and removing disfluencies ("um", "uh") while preserving the core message.
+*   **Cost Efficiency**: It is extremely efficient for high-volume text processing, making the business model viable.
+*   **Intelligent Instruction Following**: It perfectly understands the nuance of "fixing grammar without changing the tone," a task where smaller models often fail.
 
 ---
 
 ## 🏗️ App Architecture
 
-VoDrop is built with **Kotlin Multiplatform** and follows strict **MVVM + SSOT** principles.
+VoDrop is built with **Kotlin Multiplatform (KMP)** and follows strict **MVVM + SSOT** principles.
 
 ```mermaid
 classDiagram
@@ -111,6 +111,11 @@ classDiagram
         +transcribe()
         +polish()
     }
+    class AudioRecorder {
+        <<Interface>>
+        +start(Config)
+        +stop()
+    }
 
     MainViewModel --> RecordingSessionManager : Observes
     RecordingSessionManager --> CloudTranscriptionService : Calls
@@ -118,7 +123,8 @@ classDiagram
 ```
 
 *   **Single Source of Truth**: `RecordingSessionManager` holds the *only* valid state of the recording session.
-*   **Thin UI**: The ViewModel simply exposes this state and forwards user intents.
+*   **Platform Specifics**: The `AudioRecorder` uses native implementations (Android `AudioRecord`, Java `TargetDataLine` for Desktop) to ensure low-latency raw byte capture across platforms.
+*   **Thin UI**: The ViewModel simply exposes this state and forwards user intents, keeping the logic decoupled from the UI/Platform.
 
 ---
 
@@ -154,13 +160,13 @@ classDiagram
 
 ## 🔮 Roadmap
 
-*   [x] **Hackathon MVP**: Recording, Chirp 3, Gemini 3 Polish.
+*   [x] **Hackathon MVP**: Recording, Chirp 3, Gemini 1.5 Flash Polish.
 *   [ ] **Style Selection**: Choose between "Formal", "Casual", or "Bullet Points" (Powered by dynamic Gemini prompts).
 *   [ ] **Desktop Support**: Fully enable the desktop target (currently logic-only).
-*   [ ] **WearOS Companion**: Record directly from your watch.
+*   [ ] **iOS Support**: Expand the KMP codebase to target iOS users.
 
 ---
 
 <div align="center">
-Built with ❤️ for the Gemini 3 Hackathon
+Built with ❤️ for the Gemini Hackathon
 </div>
