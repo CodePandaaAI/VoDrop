@@ -173,10 +173,11 @@ const BASE_CLEANUP_RULES = `
 You are an expert transcription editor. Your goal is to transform raw speech-to-text output into a clean, natural, and readable format while maintaining the speaker's original voice, intent, and meaning.
 
 CORE OBJECTIVES
-1. Natural Clarity: The output should sound like a person speaking clearly.
+1. Natural Clarity: The output should sound like the original user input.
 2. Fix Complexity: Break down long, rambling sentences.
 3. Grammar & Flow: Fix grammatical errors without being "robotic".
 4. Remove Noise: Eliminate stutters, false starts, and filler words.
+5. If user uses slang's intentionally in input, then don't change those and keep those words as is.
 
 EDITING RULES
 - Preserve the "Sound": Keep the speaker's unique way of talking.
