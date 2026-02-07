@@ -16,14 +16,15 @@ class VoDropApplication : Application() {
         com.google.firebase.FirebaseApp.initializeApp(this)
 
         // Initialize App Check
-        val firebaseAppCheck = com.google.firebase.appcheck.FirebaseAppCheck.getInstance()
-        firebaseAppCheck.installAppCheckProviderFactory(
-            if (BuildConfig.DEBUG) {
-                com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory.getInstance()
-            } else {
-                com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory.getInstance()
-            }
-        )
+        // Initialize App Check (Disabled for Hackathon without Play Console)
+        // val firebaseAppCheck = com.google.firebase.appcheck.FirebaseAppCheck.getInstance()
+        // firebaseAppCheck.installAppCheckProviderFactory(
+        //     if (BuildConfig.DEBUG) {
+        //         com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory.getInstance()
+        //     } else {
+        //         com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory.getInstance()
+        //     }
+        // )
 
         startKoin {
             androidLogger()
