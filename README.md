@@ -9,7 +9,7 @@
  
 > Just tap, speak, and get perfect text.
 
-[🎥 **Watch the Demo Video**](LINK_TO_YOUTUBE_VIDEO_HERE)
+[🎥 **Watch the Demo Video**](https://youtube.com/shorts/ytGpDQcDo6c)
 
 </div>
 
@@ -74,13 +74,13 @@ It does not change what you meant to say.
 
 ## ✨ Features
 
-| Feature                   | Tech Stack                                                                          |
-|:--------------------------|:------------------------------------------------------------------------------------|
-| **Microphone Management** | Android Foreground Service for bulletproof background recording.                    |
-| **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                          |
-| **AI Polish**             | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs.   |
-| **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.             |
-| **Material 3 Design**     | sleek, modern UI with dark mode support.                                            |
+| Feature                   | Tech Stack                                                                      |
+|:--------------------------|:--------------------------------------------------------------------------------|
+| **Microphone Management** | Android Foreground Service for bulletproof background recording.                |
+| **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                      |
+| **AI Polish**             | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs. |
+| **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.         |
+| **Material 3 Design**     | sleek, modern UI with dark mode support.                                        |
 
 ---
 
@@ -158,7 +158,7 @@ classDiagram
 
 1.  **Clone the repo**
     ```bash
-    git clone https://github.com/yourusername/vodrop.git
+    git clone https://github.com/CodePandaaAI/VoDrop.git
     ```
 
 2.  **Setup Firebase**
