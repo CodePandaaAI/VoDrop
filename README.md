@@ -15,6 +15,19 @@
 
 ---
 
+## 📱 Screenshots
+
+<div align="center">
+
+<img src="https://github.com/user-attachments/assets/8d02b9c8-e984-4dca-a804-4c0081928525" width="250" alt="VoDrop AI Polish Demo"/>
+<img src="https://github.com/user-attachments/assets/2807e866-e2e9-4471-acc8-26968ca58c66" width="250" alt="VoDrop Home Screen"/>
+<img src="https://github.com/user-attachments/assets/d348c5a7-401d-4db0-b4e7-a980cf0309da" width="250" alt="VoDrop Recording"/>
+<img src="https://github.com/user-attachments/assets/6c624263-9247-4c26-8e86-efba4618e6d7" width="250" alt="VoDrop Demo"/>
+
+</div>
+
+---
+
 ## 🎯 The Purpose
 
 Life happens on the go. You have a brilliant idea or a complex thought, but:
