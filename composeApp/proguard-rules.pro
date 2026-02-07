@@ -19,8 +19,8 @@
 # ═══ FIREBASE / GMS ═══
 # Most Firebase libraries provide their own rules.
 # Only add these if you experience crashes in RELEASE builds.
-# -keep class com.google.firebase.** { *; }
-# -keep class com.google.android.gms.** { *; }
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
 
 # ═══ GENERAL HOUSEKEEPING ═══
 -dontwarn okhttp3.**

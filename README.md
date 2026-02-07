@@ -74,13 +74,13 @@ It does not change what you meant to say.
 
 ## ✨ Features
 
-| Feature                   | Tech Stack                                                                          |
-|:--------------------------|:------------------------------------------------------------------------------------|
-| **Microphone Management** | Android Foreground Service for bulletproof background recording.                    |
-| **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                          |
-| **AI Polish**             | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs.   |
-| **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.             |
-| **Material 3 Design**     | sleek, modern UI with dark mode support.                                            |
+| Feature                   | Tech Stack                                                                      |
+|:--------------------------|:--------------------------------------------------------------------------------|
+| **Microphone Management** | Android Foreground Service for bulletproof background recording.                |
+| **Smart Transcription**   | **Chirp 3 (USM)** automatically handles accents and noise.                      |
+| **AI Polish**             | **Gemini 3 Flash** rewrites unstructured thought streams into crisp paragraphs. |
+| **Unified Architecture**  | Single Source of Truth (SSOT) architecture for robust state management.         |
+| **Material 3 Design**     | sleek, modern UI with dark mode support.                                        |
 
 ---
 
