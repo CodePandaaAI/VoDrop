@@ -52,7 +52,6 @@ export const transcribeChirp = onCall(
   {
     timeoutSeconds: 300,
     memory: "1GiB",
-    minInstances: 1,
     maxInstances: 10,
     consumeAppCheckToken: false,
   },
@@ -212,8 +211,7 @@ export const cleanupText = onCall(
   {
     secrets: [geminiApiKey],
     timeoutSeconds: 120, // Short timeout as Gemini Flash is extremely fast
-    memory: "512MiB",    // Minimal memory needed for simple API proxying
-    minInstances: 1,
+    memory: "1GiB",    // Minimal memory needed for simple API proxying
     maxInstances: 10,
     consumeAppCheckToken: false,
   },
